@@ -265,8 +265,10 @@ private[spark] class Executor(
   }
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
+    // TaskRunner extends Runnable
     val tr = new TaskRunner(context, taskDescription, plugins)
     runningTasks.put(taskDescription.taskId, tr)
+    // 放入线程池运行, 调用TaskRunner的run
     threadPool.execute(tr)
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
@@ -454,6 +456,10 @@ private[spark] class Executor(
 
         updateDependencies(
           taskDescription.addedFiles, taskDescription.addedJars, taskDescription.addedArchives)
+        // 反序列化TaskDescription中的Task
+        // 接下来调用task.run, run 中调用runTask方法, 具体实现看ResultTask和ShuffleMapTask的runTask方法
+        // 不管是ResultTask还是ShuffleMapTask都会调用stage的最后一个rdd的iterator方法,
+        // 不同的是ShuffleMapTask把分区数据写入shuffle, ResultTask是在分区数据应用func并把结果返回driver端
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties

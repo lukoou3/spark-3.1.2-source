@@ -251,7 +251,7 @@
       Overridable test home. So that you can call individual pom files directly without
       things breaking.
     -->
-    <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+    <spark.test.home>session.executionRootDirectory</spark.test.home>
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
     <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
 
@@ -2503,7 +2503,7 @@
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>incremental</recompileMode>
-            <useZincServer>true</useZincServer>
+            <!--<useZincServer>true</useZincServer>-->
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
@@ -3074,8 +3074,6 @@
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
         <version>1.0.3</version>
         <configuration>
-          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->

@@ -80,6 +80,7 @@ private[spark] class ResultTask[T, U](
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
+    // 反序列化得到rdd和Task的func, rdd是stage的最后一个rdd, func是sc.runJob中传的func
     val (rdd, func) = ser.deserialize[(RDD[T], (TaskContext, Iterator[T]) => U)](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
@@ -87,6 +88,8 @@ private[spark] class ResultTask[T, U](
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
 
+    // 在每个分区上调用sc.runJob中传的func, 把最后一个rdd的iterator传入
+    // rdd的iterator方法最终实际上都是调用的rdd的compute方法, 其他的条件都是判断cache或者checkpoint
     func(context, rdd.iterator(partition, context))
   }
 

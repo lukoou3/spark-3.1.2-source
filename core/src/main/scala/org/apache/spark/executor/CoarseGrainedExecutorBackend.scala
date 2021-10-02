@@ -164,12 +164,15 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
     case LaunchTask(data) =>
+      // Executor中调用Task的入口
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
+        // 反序列化TaskDescription
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         taskResources(taskDesc.taskId) = taskDesc.resources
+        // 启动Task
         executor.launchTask(this, taskDesc)
       }
 

@@ -82,6 +82,7 @@ private[spark] class ShuffleMapTask(
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
+    // 反序列化得到stage的最后一个rdd和依赖
     val rddAndDep = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTimeNs = System.nanoTime() - deserializeStartTimeNs
@@ -96,6 +97,10 @@ private[spark] class ShuffleMapTask(
     val mapId = if (SparkEnv.get.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
       partitionId
     } else context.taskAttemptId()
+    // 直接shuffle writer对应Task的stage的最后一个rdd的分区数据
+    // 和ResultTask类似，也调用了rdd.iterator(partition, context),
+    // 只不过ShuffleMapTask把数据调用iterator写入shuffle,
+    // 而ResultTask是调用iterator获取ResultTask[T, U]U对应数据，把数据直接返回driver端
     dep.shuffleWriterProcessor.write(rdd, dep, mapId, context, partition)
   }
 
