@@ -44,6 +44,7 @@ import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
+ * (key, value) pairs形式RDD的额外方法，通过隐式转换可以直接调用
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  */
 class PairRDDFunctions[K, V](self: RDD[(K, V)])
@@ -51,6 +52,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   extends Logging with Serializable {
 
   /**
+   * reduceByKey,combineByKey,aggregateByKey最终调的都是combineByKeyWithClassTag, 实现逻辑直接看这个函数的源码即可。
+   * 需要提供三个函数:
+   *  createCombiner: V => C: map write端每个分区每个key首次创建合并器触发
+   *  mergeValue: (C, V) => C: map write端每个分区合并器合并
+   *  mergeCombiners: (C, C) => C: map read端合并
+   *
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
    *
@@ -74,6 +81,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       mapSideCombine: Boolean = true,
       serializer: Serializer = null)(implicit ct: ClassTag[C]): RDD[(K, C)] = self.withScope {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
+    // key的class不支持mapSideCombine(map端预聚合), 不支持HashPartitioner(hash分区器)
     if (keyClass.isArray) {
       if (mapSideCombine) {
         throw new SparkException("Cannot use map-side combining with array keys.")
@@ -82,16 +90,19 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         throw new SparkException("HashPartitioner cannot partition array keys.")
       }
     }
+    // 创建聚合器, 需要传入createCombiner, mergeValue, mergeCombiners
     val aggregator = new Aggregator[K, V, C](
       self.context.clean(createCombiner),
       self.context.clean(mergeValue),
       self.context.clean(mergeCombiners))
+    // 已有分区器并且分区器和传入的分区器相等, 则没必要聚合
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(iter => {
         val context = TaskContext.get()
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
       }, preservesPartitioning = true)
     } else {
+      // 生成ShuffledRDD, 设置aggregator, 设置mapSideCombine
       new ShuffledRDD[K, V, C](self, partitioner)
         .setSerializer(serializer)
         .setAggregator(aggregator)
@@ -100,6 +111,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * 直接调用的combineByKeyWithClassTag
+   * 这个函数不提供combiner classtag information
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. This method is here for backward compatibility. It does not provide combiner
    * classtag information to the shuffle.
@@ -118,6 +131,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * 简易版本的combineByKeyWithClassTag, 使用hash-partitions
+   * 这个函数不提供combiner classtag information
    * Simplified version of combineByKeyWithClassTag that hash-partitions the output RDD.
    * This method is here for backward compatibility. It does not provide combiner
    * classtag information to the shuffle.
@@ -155,14 +170,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
+    // 序列化初始化值到字节数组, 一遍在每个key上新建一个clone; 用() => v的话是不行的, 这样会每个task一个value, 除非使用不可变对象比如元组
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
     val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
+    // 当反序列化时使用lazy使每个task仅仅创建一个实例
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
 
+    // seqOp用在createCombiner, mergeValue, combOp用在mergeCombiners
     // We will clean the combiner closure later in `combineByKey`
     val cleanedSeqOp = self.context.clean(seqOp)
     combineByKeyWithClassTag[U]((v: V) => cleanedSeqOp(createZero(), v),
@@ -205,15 +223,18 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def foldByKey(
       zeroValue: V,
       partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = self.withScope {
+    // 序列化初始化值到字节数组, 一遍在每个key上新建一个clone; 用() => v的话是不行的, 这样会每个task一个value, 除非使用不可变对象比如元组
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
     val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
+    // 当反序列化时使用lazy使每个task仅仅创建一个实例
     // When deserializing, use a lazy val to create just one instance of the serializer per task
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
 
+    // func在createCombiner, mergeValue, mergeCombiners中都调用
     val cleanedFunc = self.context.clean(func)
     combineByKeyWithClassTag[V]((v: V) => cleanedFunc(createZero(), v),
       cleanedFunc, cleanedFunc, partitioner)
@@ -300,6 +321,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * to a "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
+    // 初始Combiner就是元素本身, mergeValue和mergeCombiners都是func
     combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)
   }
 
@@ -479,6 +501,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * 每个key group的元素顺序不能保证, 多次执行顺序可能不同
+   *
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    * The ordering of elements within each group is not guaranteed, and may even differ
@@ -488,18 +512,27 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
    * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    *
+   * @note 按照当前的实现，groupByKey对应每个key必须能够在保存内存中保存所有的key-value pairs。
+   * 如果一个key有太多的值，会导致OutOfMemoryError，这点从参数是Iterable也能够看出。
+   * mapPartitions的参数Iterator没这个问题，除非使用者把Iterator中的数据给缓存。
+   * groupByKey不使用map端聚合，做聚合操作请使用reduceByKey,aggregateByKey等聚合算子
+   *
    * @note As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an `OutOfMemoryError`.
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = self.withScope {
+    // groupByKey不会map端聚合, 因为map端聚合并不能减少shuffle的数据量, 反而需要把数据插入map增加gc负担
     // groupByKey shouldn't use map side combine because map side combine does not
     // reduce the amount of data shuffled and requires all map side data be inserted
     // into a hash table, leading to more objects in the old gen.
+    // 使用CompactBuffer做Combiner, 会把每个key对应的value放入Combiner, 数据都保存在内存中, 难怪一个key有太多的值，会导致OutOfMemoryError
     val createCombiner = (v: V) => CompactBuffer(v)
     val mergeValue = (buf: CompactBuffer[V], v: V) => buf += v
     val mergeCombiners = (c1: CompactBuffer[V], c2: CompactBuffer[V]) => c1 ++= c2
+    // 使用CompactBuffer做Combiner, 并设置mapSideCombine = false
     val bufs = combineByKeyWithClassTag[CompactBuffer[V]](
       createCombiner, mergeValue, mergeCombiners, partitioner, mapSideCombine = false)
+    // CompactBuffer extends Seq, 也就是Iterable, 所以可能会内存溢出
     bufs.asInstanceOf[RDD[(K, Iterable[V])]]
   }
 
@@ -539,6 +572,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = self.withScope {
+    // join的实现真是巧妙, 看spark的代码真是一种享受
+    // pair._1,pair._2都是Iterable所以能够循环迭代, 直接在iterator上循环是无法实现的, 因为iterator只能迭代一次
+    // 这里也看出了cogroup为啥返回Iterable，可能会导致OutOfMemoryError
     this.cogroup(other, partitioner).flatMapValues( pair =>
       for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w)
     )
@@ -589,6 +625,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], Option[W]))] = self.withScope {
+    // CompactBuffer extends Seq可以使用Seq()匹配空序列, 需要注意内存溢出哦
     this.cogroup(other, partitioner).flatMapValues {
       case (vs, Seq()) => vs.iterator.map(v => (Some(v), None))
       case (Seq(), ws) => ws.iterator.map(w => (None, Some(w)))
@@ -742,22 +779,26 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * 对value应用map算子，同时保留原始RDD的分区器
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
   def mapValues[U](f: V => U): RDD[(K, U)] = self.withScope {
     val cleanF = self.context.clean(f)
+    // 这里不直接调用RDD的map算子是因为要传入preservesPartitioning = true保留分区器
     new MapPartitionsRDD[(K, U), (K, V)](self,
       (context, pid, iter) => iter.map { case (k, v) => (k, cleanF(v)) },
       preservesPartitioning = true)
   }
 
   /**
+   * 对value应用flatMap算子，同时保留原始RDD的分区器
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
    */
   def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = self.withScope {
     val cleanF = self.context.clean(f)
+    // 这里不直接调用RDD的map算子是因为要传入preservesPartitioning = true保留分区器
     new MapPartitionsRDD[(K, U), (K, V)](self,
       (context, pid, iter) => iter.flatMap { case (k, v) =>
         cleanF(v).map(x => (k, x))
@@ -796,7 +837,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
       throw new SparkException("HashPartitioner cannot partition array keys.")
     }
+    // 可以看到传入Seq说明可以任务多的rdd，spark默认提供了连接1-3个rdd的情况
+    // CoGroupedRDD元素使用CompactBuffer[Any]储存的, 和groupByKey一样可能会导致OutOfMemoryError
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
+    // 模式匹配Array, 连接1-3个rdd的情况实现类似
     cg.mapValues { case Array(vs, w1s) =>
       (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
     }
@@ -1102,6 +1146,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def values: RDD[V] = self.map(_._2)
 
+  // 通过ClassTag隐式转换获取运行时类的class, 自己写代码时可以学习学习
   private[spark] def keyClass: Class[_] = kt.runtimeClass
 
   private[spark] def valueClass: Class[_] = vt.runtimeClass

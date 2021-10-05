@@ -87,6 +87,8 @@ private[spark] class CoalescedRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     val pc = partitionCoalescer.getOrElse(new DefaultPartitionCoalescer())
 
+    // CoalescedRDD分区数取父rdd分区数和maxPartitions的最小值
+    // math.min(prev.partitions.length, maxPartitions)
     pc.coalesce(maxPartitions, prev).zipWithIndex.map {
       case (pg, i) =>
         val ids = pg.partitions.map(_.index).toArray

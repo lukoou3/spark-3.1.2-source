@@ -416,10 +416,16 @@ abstract class RDD[T: ClassTag](
   // Transformations (return a new RDD)
 
   /**
+   * 返回一个新rdd, 传入的func会作用于这个rdd每个分区iter的map函数上, 相当于每个分区调用iter.map(func)
+   * 大部分的窄依赖算子都是类似的, 返回一个新的MapPartitionsRDD
+   * MapPartitionsRDD需要传入: (TaskContext, Int, Iterator[T]) => Iterator[U]
+   *  调用原始rdd每个分区的iter, 生成新的rdd每个分区的iter
    * Return a new RDD by applying a function to all elements of this RDD.
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
+    // 检查函数闭包, 序列化
     val cleanF = sc.clean(f)
+    // 匿名函数不用参数用_, 省的提示变量没被使用
     new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.map(cleanF))
   }
 
@@ -437,6 +443,7 @@ abstract class RDD[T: ClassTag](
    */
   def filter(f: T => Boolean): RDD[T] = withScope {
     val cleanF = sc.clean(f)
+    // filter的preservesPartitioning传的true，因为不会改变key， 不会改变分区器
     new MapPartitionsRDD[T, T](
       this,
       (_, _, iter) => iter.filter(cleanF),
@@ -484,6 +491,17 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * shuffle = false, 生成CoalescedRDD(this), 生成CoalescedRDD的分区数<=当前分区数,
+   * 也就是说传入numPartitions >= 当前分区数时, 相当于返回rdd本身, 相当于没操作, 不会发生 shuffle.
+   *
+   *  shuffle = true, 和repartition算子一样, 生成CoalescedRDD(ShuffledRDD(this, numPartitions)), 会完全打乱数据, numPartitions可以取>0的任意值
+   * 实际情况下这种用的最多，比如过滤了数据想减少分区数但是窄依赖并行度取最后一个rdd的并行度，效率可能会很低，
+   * 这时可以用repartition前面的并行度大点然后缩小分区, 用repartition还能保持分区数据均匀。
+   * 当然coalesce也有使用的情况，比如写sql时读取的是很多小文件，可以用coalesce合并分区。
+   *
+   * CoalescedRDD构造函数中numPartitions就是maxPartitions, 可见coalesce(numPartitions)后分区数不一定就是numPartitions, shuffle = false时就是这样
+   * CoalescedRDD分区数取父rdd分区数和maxPartitions的最小值, math.min(prev.partitions.length, maxPartitions)
+   *
    * Return a new RDD that is reduced into `numPartitions` partitions.
    *
    * This results in a narrow dependency, e.g. if you go from 1000 partitions
@@ -512,7 +530,9 @@ abstract class RDD[T: ClassTag](
     require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
+      // 分区数据打算函数, 为了打散数据spark真是煞费苦心, 加了一个随机的key(根据生成的key分区), 打散后取value
       val distributePartition = (index: Int, items: Iterator[T]) => {
+        // seed是固定的, 每个分区生成的position是固定的, 这样能保证每次生成的key固定，多次重复运行能保证一直
         var position = new Random(hashing.byteswap32(index)).nextInt(numPartitions)
         items.map { t =>
           // Note that the hash code of the key will just be the key itself. The HashPartitioner
@@ -523,6 +543,8 @@ abstract class RDD[T: ClassTag](
       } : Iterator[(Int, T)]
 
       // include a shuffle step so that our upstream tasks are still distributed
+      // 转换key, value形式shuffle后取values。转换key, value形式是必须的，因为ShuffledRDD必须传入Product2[K, V]的rdd，
+      // 可想只要shuffle都和pair rdd有关, 这里也是根据生成的key分区。
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](
           mapPartitionsWithIndexInternal(distributePartition, isOrderSensitive = true),
@@ -530,6 +552,7 @@ abstract class RDD[T: ClassTag](
         numPartitions,
         partitionCoalescer).values
     } else {
+      // 无shuffle, maxPartitions = numPartitions
       new CoalescedRDD(this, numPartitions, partitionCoalescer)
     }
   }
@@ -658,6 +681,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * 返回和另一个RDD的并集。相同元素会出现多次，要想去重用distinct()实现
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */
@@ -666,6 +690,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * union(other)的运算符表示
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).
    */

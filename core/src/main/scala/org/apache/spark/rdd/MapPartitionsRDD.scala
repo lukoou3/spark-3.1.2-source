@@ -38,16 +38,23 @@ import org.apache.spark.{Partition, TaskContext}
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
+    // 核心逻辑就是这个函数, 看到每个分区函数可以访问的信息: TaskContext, 分区索引, 分区迭代器
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false,
     isFromBarrier: Boolean = false,
     isOrderSensitive: Boolean = false)
   extends RDD[U](prev) {
+  // 继承的RDD构造函数: this(@transient oneParent: RDD[_]) = this(oneParent.context, List(new OneToOneDependency(oneParent)))
+  // parent RDD就是prev, 是窄依赖OneToOneDependency
 
+  // 是否保存分区器, 正常传入false, 除非prev is a pair RDD并且输入函数不改变keys
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
 
+  // 分区就是prev的分区
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
+  // compute是rdd数据的核心方法, rdd的iterator最终都会调用compute方法
+  // 把传入func应用于父rdd的iterator, 相当于调用应用于父rdd每个分区的迭代器上
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     f(context, split.index, firstParent[T].iterator(split, context))
 

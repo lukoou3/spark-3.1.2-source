@@ -1401,11 +1401,15 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = withScope {
+    // 过滤分区数为0的Rdd
     val nonEmptyRdds = rdds.filter(!_.partitions.isEmpty)
+    // 去重的分区器
     val partitioners = nonEmptyRdds.flatMap(_.partitioner).toSet
+    // 所有Rdd的分区器一样
     if (nonEmptyRdds.forall(_.partitioner.isDefined) && partitioners.size == 1) {
       new PartitionerAwareUnionRDD(this, nonEmptyRdds)
     } else {
+      // 分区器不一样
       new UnionRDD(this, nonEmptyRdds)
     }
   }
