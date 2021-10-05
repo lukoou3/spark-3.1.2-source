@@ -2174,6 +2174,9 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * spark中所有actions的主要入口，在rdd的给定分区上运行task func，并调用回调函数resultHandler
+   * 回调函数resultHandler的调用加了锁(可以看JobWaiter.taskSucceeded)，不必担心线程安全的问题
+   *
    * Run a function on a given set of partitions in an RDD and pass the results to the given
    * handler function. This is the main entry point for all actions in Spark.
    *
@@ -2184,10 +2187,11 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param resultHandler callback to pass each result to
    */
   def runJob[T, U: ClassTag](
-      rdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      resultHandler: (Int, U) => Unit): Unit = {
+      rdd: RDD[T], // 运行job的rdd, 最后一个stage的最后一个rdd
+      func: (TaskContext, Iterator[T]) => U, // 最后一个stage的task, 也就是ResultTask中运行的task
+      partitions: Seq[Int], // 需要运行task的分区索引, 有些job不需要运行所有分区, 比如first()
+      resultHandler: (Int, U) => Unit // 任务成功的回调函数
+    ): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
@@ -2197,6 +2201,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
+    // 运行job，知道job结束，同步的方法
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
@@ -2218,6 +2223,7 @@ class SparkContext(config: SparkConf) extends Logging {
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int]): Array[U] = {
     val results = new Array[U](partitions.size)
+    // 通过回调函数把每个分区的结果放到数组中，results的结果是有序的
     runJob[T, U](rdd, func, partitions, (index, res) => results(index) = res)
     results
   }

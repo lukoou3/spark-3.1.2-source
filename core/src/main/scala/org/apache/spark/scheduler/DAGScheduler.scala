@@ -872,8 +872,11 @@ private[spark] class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
     val start = System.nanoTime
+    // 提交job, 返回类型Future的对象
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
+    // 等待知道job结束
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
+    // 成功打印job信息, 失败则抛出异常
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format

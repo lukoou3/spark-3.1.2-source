@@ -762,6 +762,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
+   * 把pairRDD回收到driver端Map, 重复的key后面的value会覆盖前面的。
    * Return the key-value pairs in this RDD to the master as a Map.
    *
    * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
@@ -773,6 +774,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def collectAsMap(): Map[K, V] = self.withScope {
     val data = self.collect()
     val map = new mutable.HashMap[K, V]
+    // 暗示多少元素会被添加
     map.sizeHint(data.length)
     data.foreach { pair => map.put(pair._1, pair._2) }
     map

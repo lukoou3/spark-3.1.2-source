@@ -54,6 +54,7 @@ private[spark] class JobWaiter[T](
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = {
+    // 任务成功的回调函数, 这里必须加锁，因为不是线程安全的
     // resultHandler call must be synchronized in case resultHandler itself is not thread safe.
     synchronized {
       resultHandler(index, result.asInstanceOf[T])

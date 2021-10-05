@@ -1857,6 +1857,9 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * 使用while循环计算iterator元素的数量而不是使用iterator.size，因为它使用for循环
+   * 在当前版本的scala中for循环通过调用foreach实现，速度稍微慢点
+   *
    * Counts the number of elements of an iterator using a while loop rather than calling
    * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
    * in the current version of Scala.

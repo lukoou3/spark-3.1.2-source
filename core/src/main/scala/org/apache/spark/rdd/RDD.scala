@@ -1046,6 +1046,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * 回收rdd所有元素到driver端Array[T], 保证顺序
    * Return an array that contains all of the elements in this RDD.
    *
    * @note This method should only be used if the resulting array is expected to be small, as
@@ -1053,6 +1054,7 @@ abstract class RDD[T: ClassTag](
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+    // scala提供的连接数组的函数
     Array.concat(results: _*)
   }
 
@@ -1125,7 +1127,9 @@ abstract class RDD[T: ClassTag](
    * associative binary operator.
    */
   def reduce(f: (T, T) => T): T = withScope {
+    // 清理闭包使函数可以序列化, 检查函数是否可以序列化
     val cleanF = sc.clean(f)
+    // processPartition, 处理分区的函数(运行在executor端), 返回 Option[T]
     val reducePartition: Iterator[T] => Option[T] = iter => {
       if (iter.hasNext) {
         Some(iter.reduceLeft(cleanF))
@@ -1133,7 +1137,9 @@ abstract class RDD[T: ClassTag](
         None
       }
     }
+
     var jobResult: Option[T] = None
+    // resultHandler, 回调函数(运行在driver端), 合并各分区结果, 所以可以通过闭包更新jobResult的值
     val mergeResult = (_: Int, taskResult: Option[T]) => {
       if (taskResult.isDefined) {
         jobResult = jobResult match {
@@ -1143,6 +1149,7 @@ abstract class RDD[T: ClassTag](
       }
     }
     sc.runJob(this, reducePartition, mergeResult)
+    // 如果是空的rdd则抛出异常
     // Get the final result out of our Option, or throw an exception if the RDD was empty
     jobResult.getOrElse(throw new UnsupportedOperationException("empty collection"))
   }
@@ -1180,6 +1187,10 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * 用op(t1, t2)和zero value聚合每个分区的元素, 然后聚合分区的结果。zero value会被调用分区数 + 1 次， 所以zero value最好就是zero value。
+   * op(t1, t2)可以修改t1然后返回t1避免创建太多的对象; 然而不应该修改t2, 这是rdd中的元素, 按照惯例不能修改以免产生bug。
+   * 不同于scala集合的fold，聚合分区的结果的操作不是按照顺序进行的，对于不可交换的函数，多次运行可能产生不同的结果。
+   *
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
    * given associative function and a neutral "zero value". The function
    * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
@@ -1200,16 +1211,22 @@ abstract class RDD[T: ClassTag](
    *                  from different partitions
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
+    // clone zeroValue 作为jobResult初始值, zeroValue本身会被每个task反序列化
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
     val cleanOp = sc.clean(op)
+    // 合并分区, 每个task使用zeroValue
     val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp)
+    // 合并结果，更新闭包jobResult，使用一次zeroValue。合并顺序不固定。
     val mergeResult = (_: Int, taskResult: T) => jobResult = op(jobResult, taskResult)
     sc.runJob(this, foldPartition, mergeResult)
     jobResult
   }
 
   /**
+   * 和fold类似，就是分区聚合和结果聚合函数不同，可以返回其他类型的rdd。
+   * 如scala.TraversableOnce中所述。这两个函数都可以修改并返回它们的第一个参数，而不是创建一个新的U以避免内存分配。
+   *
    * Aggregate the elements of each partition, and then the results for all the partitions, using
    * given combine functions and a neutral "zero value". This function can return a different result
    * type, U, than the type of this RDD, T. Thus, we need one operation for merging a T into an U
@@ -1225,11 +1242,15 @@ abstract class RDD[T: ClassTag](
    * @param combOp an associative operator used to combine results from different partitions
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = withScope {
+    // clone zeroValue 作为jobResult初始值, zeroValue本身会被每个task反序列化
     // Clone the zero value since we will also be serializing it as part of tasks
     var jobResult = Utils.clone(zeroValue, sc.env.serializer.newInstance())
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
+    // 虽然调用的是it.aggregate(zeroValue)(seqOp, combOp), aggregate的实现TraversableOnce实际是foldLeft(z)(seqop), 只用到了seqOp
+    // 合并分区, 每个task使用zeroValue
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
+    // 合并结果，更新闭包jobResult，使用一次zeroValue。合并顺序不固定。
     val mergeResult = (_: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
@@ -1274,6 +1295,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return the number of elements in the RDD.
+   * sc.runJob(this, Utils.getIteratorSize _)返回每个分区的count:Array[Long], 然后求和
+   * Utils.getIteratorSize通过while循环计算iterator的size, 比iterator默认的size方法稍微快点
    */
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
@@ -1434,6 +1457,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * 获取rdd的前n个元素, 第一次只需要扫描一个分区, 没满则后续根据之前获取的数据来估计需要扫描的分区数
+   *
    * Take the first num elements of the RDD. It works by first scanning one partition, and use the
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
@@ -1447,30 +1472,36 @@ abstract class RDD[T: ClassTag](
   def take(num: Int): Array[T] = withScope {
     val scaleUpFactor = Math.max(conf.get(RDD_LIMIT_SCALE_UP_FACTOR), 2)
     if (num == 0) {
+      // num == 0时直接返回空数组
       new Array[T](0)
     } else {
       val buf = new ArrayBuffer[T]
-      val totalParts = this.partitions.length
-      var partsScanned = 0
+      val totalParts = this.partitions.length // 总分区数
+      var partsScanned = 0 // 扫描的分区数
+      // 获取数量 < num 并且 扫描的分区数 < 总分区数
       while (buf.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1L
-        val left = num - buf.size
-        if (partsScanned > 0) {
+        var numPartsToTry = 1L // 需要运行的分区数, 第一次为1, 可以比总分区数大, 下面会判断
+        val left = num - buf.size // 本次job需要的take的数量
+        if (partsScanned > 0) { // 非第一扫描的情况
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
           // it by 50%. We also cap the estimation in the end.
           if (buf.isEmpty) {
+            // 空的, 本次需要运行的分区数 = 扫描的分区数 * 2
             numPartsToTry = partsScanned * scaleUpFactor
           } else {
             // As left > 0, numPartsToTry is always >= 1
+            // 非空, 估算下本次需要运行的分区数
             numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
             numPartsToTry = Math.min(numPartsToTry, partsScanned * scaleUpFactor)
           }
         }
 
+        // 本次需要扫描的分区, 第一次扫描第一个分区,
         val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+        // res: Array[Array[T]], 每个分区都只取left, 之后顺序从res取left个即可
         val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p)
 
         res.foreach(buf ++= _.take(num - buf.size))
@@ -1515,6 +1546,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * 返回最小的k个元素，根据隐士的Ordering[T]，很容易自定义顺序
    * Returns the first k (smallest) elements from this RDD as defined by the specified
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
@@ -1537,10 +1569,15 @@ abstract class RDD[T: ClassTag](
     if (num == 0) {
       Array.empty
     } else {
+      // 每个分区取前k个元素, 然后总和取k, 这里用了一个有界优先队列(BoundedPriorityQueue)来实现
+      // takeOrdered(k) 比 先orderBy再take(k)效率高, 因为没有shuffle而且每个分区最多取k
       val mapRDDs = mapPartitions { items =>
+        // Priority保留最大的k个元素, 所以传入一个翻转的ordering
         // Priority keeps the largest elements, so let's reverse the ordering.
         val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+        // 取迭代器的top k使用了Guava中的函数:com.google.common.collect.Ordering.leastOf(iterator, k)
         queue ++= collectionUtils.takeOrdered(items, num)(ord)
+        // 单个元素的迭代器
         Iterator.single(queue)
       }
       if (mapRDDs.partitions.length == 0) {
