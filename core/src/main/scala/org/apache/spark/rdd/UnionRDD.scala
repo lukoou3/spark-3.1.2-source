@@ -82,9 +82,11 @@ class UnionRDD[T: ClassTag](
     } else {
       rdds
     }
+    // 分区数是父rdd分区数之和
     val array = new Array[Partition](parRDDs.map(_.partitions.length).sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
+      // pos: 分区索引, rdd: 父rdd, rddIndex: 父rdd索引, split.index: 父rdd对应分区索引
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
       pos += 1
     }
@@ -95,6 +97,14 @@ class UnionRDD[T: ClassTag](
     val deps = new ArrayBuffer[Dependency[_]]
     var pos = 0
     for (rdd <- rdds) {
+      /**
+       * RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
+       * rdd: 父rdd
+       * inStart: 此range在父rdd的起始位置, 固定为 0
+       * outStart: 此range在子rdd的起始位置(相当于父rdd分区在rdd分区中的偏移量), 依次为: 0, rdd1.partitions.length, rdd1.partitions.length + rdd2.partitions.length, ...
+       * length: 此range 的长度, 父rdd的分区数
+       * 子rdd的partitionId对应父rdd的分区: partitionId - outStart(inStart可以忽略)
+       */
       deps += new RangeDependency(rdd, 0, pos, rdd.partitions.length)
       pos += rdd.partitions.length
     }
@@ -103,6 +113,8 @@ class UnionRDD[T: ClassTag](
 
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
     val part = s.asInstanceOf[UnionPartition[T]]
+    // parent[T](part.parentRddIndex): 父rdd
+    // part.parentPartition: 对应父rdd的分区
     parent[T](part.parentRddIndex).iterator(part.parentPartition, context)
   }
 

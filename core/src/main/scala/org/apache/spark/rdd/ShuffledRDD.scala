@@ -79,11 +79,15 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     val serializer = userSpecifiedSerializer.getOrElse {
       val serializerManager = SparkEnv.get.serializerManager
       if (mapSideCombine) {
+        // 启用mapSideCombine, 需要序列化[K, C], [key, value]
         serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[C]])
       } else {
+        // 不启用mapSideCombine, 需要序列化[K, V], [key, value]
         serializerManager.getSerializer(implicitly[ClassTag[K]], implicitly[ClassTag[V]])
       }
     }
+    // 父rdd: RDD[_ <: Product2[K, V]], 分区器: Partitioner, serializer: Serializer
+    // keyOrdering: Option[Ordering[K]], aggregator: Option[Aggregator[K, V, C]], mapSideCombine: Boolean
     List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
   }
 

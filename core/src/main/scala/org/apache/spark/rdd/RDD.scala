@@ -131,6 +131,7 @@ abstract class RDD[T: ClassTag](
   protected def getPartitions: Array[Partition]
 
   /**
+   * 由子类实现，以返回此RDD如何依赖于父RDD。此方法只调用一次，因此在其中实现耗时的计算是安全的。
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
    */
@@ -253,6 +254,7 @@ abstract class RDD[T: ClassTag](
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)
 
   /**
+   * 获取此RDD的依赖项列表，考虑RDD是否已设置检查点。
    * Get the list of dependencies of this RDD, taking into account whether the
    * RDD is checkpointed or not.
    */
@@ -706,6 +708,7 @@ abstract class RDD[T: ClassTag](
       ascending: Boolean = true,
       numPartitions: Int = this.partitions.length)
       (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] = withScope {
+    // 使用keyBy转换成pair rdd, 然后调用sortByKey, 最后取values
     this.keyBy[K](f)
         .sortByKey(ascending, numPartitions)
         .values
@@ -1964,6 +1967,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * 清除此RDD的依赖项。此方法必须确保删除对原始父RDD的所有引用，以便能够对父RDD进行垃圾收集。
+   * RDD的子类可以重写这个方法来实现它们自己的清理逻辑。有关示例，请参见org.apache.spark.rdd.UnionRDD。
    * Clears the dependencies of this RDD. This method must ensure that all references
    * to the original parent RDDs are removed to enable the parent RDDs to be garbage
    * collected. Subclasses of RDD may override this method for implementing their own cleaning

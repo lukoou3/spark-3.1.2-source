@@ -31,11 +31,15 @@ import org.apache.spark.storage.BlockManagerId
  */
 @DeveloperApi
 abstract class Dependency[T] extends Serializable {
+  // 只有一个抽象方法, 依赖的父rdd
   def rdd: RDD[T]
 }
 
 
 /**
+ * 窄依赖的基类，子rdd的每个分区依赖父rdd的少量分区(a small numberof partitions of the parent RDD)。
+ * NarrowDependency允许pipeline方式执行task。
+ *
  * :: DeveloperApi ::
  * Base class for dependencies where each partition of the child RDD depends on a small number
  * of partitions of the parent RDD. Narrow dependencies allow for pipelined execution.
@@ -43,12 +47,14 @@ abstract class Dependency[T] extends Serializable {
 @DeveloperApi
 abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
   /**
+   * 获取子rdd一个分区依赖的父rdd分区id数组
    * Get the parent partitions for a child partition.
-   * @param partitionId a partition of the child RDD
-   * @return the partitions of the parent RDD that the child partition depends upon
+   * @param partitionId a partition of the child RDD 子rdd的分区id
+   * @return the partitions of the parent RDD that the child partition depends upon 返回这个分区依赖的父rdd分区id数组
    */
   def getParents(partitionId: Int): Seq[Int]
 
+  // 依赖的父rdd, 通过构造函数传入
   override def rdd: RDD[T] = _rdd
 }
 
@@ -91,8 +97,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[spark] val combinerClassName: Option[String] =
     Option(reflect.classTag[C]).map(_.runtimeClass.getName)
 
-  val shuffleId: Int = _rdd.context.newShuffleId()
+  val shuffleId: Int = _rdd.context.newShuffleId() // 和其他的类似, 通过AtomicInteger实现
 
+  // Shuffle 句柄, 根据条件判断可能获取的ShuffleHandle: BypassMergeSortShuffleHandle, SerializedShuffleHandle, BaseShuffleHandle
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
 
@@ -117,16 +124,19 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
 /**
  * :: DeveloperApi ::
+ * 表示父rdd和子rdd分区之间是一对一的依赖关系。
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.
  */
 @DeveloperApi
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
+  // 父rdd和子rdd对应的分区其实就是一个分区
   override def getParents(partitionId: Int): List[Int] = List(partitionId)
 }
 
 
 /**
  * :: DeveloperApi ::
+ * 一对一的依赖关系
  * Represents a one-to-one dependency between ranges of partitions in the parent and child RDDs.
  * @param rdd the parent RDD
  * @param inStart the start of the range in the parent RDD
@@ -138,6 +148,15 @@ class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
   extends NarrowDependency[T](rdd) {
 
   override def getParents(partitionId: Int): List[Int] = {
+    /**
+     * RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
+     * rdd: 父rdd
+     * inStart: 此range在父rdd的起始位置, 固定为 0
+     * outStart: 此range在子rdd的起始位置(相当于父rdd分区在rdd分区中的偏移量), 依次为: 0, rdd1.partitions.length, rdd1.partitions.length + rdd2.partitions.length, ...
+     * length: 此range 的长度, 父rdd的分区数
+     * 子rdd的partitionId对应父rdd的分区: partitionId - outStart(inStart可以忽略)
+     * 父rdd在子rdd对应的分区范围: [outStart, outStart + length)
+     */
     if (partitionId >= outStart && partitionId < outStart + length) {
       List(partitionId - outStart + inStart)
     } else {
