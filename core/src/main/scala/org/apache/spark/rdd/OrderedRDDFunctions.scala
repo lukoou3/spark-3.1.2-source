@@ -51,6 +51,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   private val ordering = implicitly[Ordering[K]]
 
   /**
+   * 可以保证全局有序，collect回收后也是有序的，保存到文件会按顺序写到多个文件里
    * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
    * `collect` or `save` on the resulting RDD will return or output an ordered list of records
    * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
@@ -60,12 +61,19 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   def sortByKey(ascending: Boolean = true, numPartitions: Int = self.partitions.length)
       : RDD[(K, V)] = self.withScope
   {
+    // 计算得出RangePartitioner, 会直接触发采样action。
+    // 在采样记录数小于分区值的情况下，RangePartitioner创建的实际分区数可能与partitions参数不同。
     val part = new RangePartitioner(numPartitions, self, ascending)
+    // 使用RangePartitioner创建ShuffledRDD，RangePartitioner本身只有分区的功能，无法实现shuffle后分区内数据有序
+    // 设置按照key排序
     new ShuffledRDD[K, V, V](self, part)
       .setKeyOrdering(if (ascending) ordering else ordering.reverse)
   }
 
   /**
+   * 根据给定的分区器重新分区RDD，并在每个生成的分区内，按item的key对item进行排序。
+   * 这比调用repartition然后在每个分区内排序更有效，因为它可以将排序向下推到shuffle机制中。
+   *
    * Repartition the RDD according to the given partitioner and, within each resulting partition,
    * sort records by their keys.
    *
