@@ -265,8 +265,12 @@ private[spark] class ApplicationMaster(
       }
 
       if (isClusterMode) {
+        // cluster模式在ApplicationMaster中单独起个线程运行driver, 等待driver线程结束
+        // 里面还有注册AM, 申请启动Container(Executor), org.apache.spark.executor.YarnCoarseGrainedExecutorBackend
         runDriver()
       } else {
+        // client模式, 和runDriver()类似, 注册AM, 申请启动Container(Executor), org.apache.spark.executor.YarnCoarseGrainedExecutorBackend
+        // 不同的是client模式ApplicationMaster会连接driver, 等待reporterThread线程结束, 监控executors
         runExecutorLauncher()
       }
     } catch {
@@ -493,6 +497,7 @@ private[spark] class ApplicationMaster(
 
   private def runDriver(): Unit = {
     addAmIpFilter(None, System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
+    // 单独起个线程调用用户编写的主类的main方法, 里面是driver程序, 初始化spark context
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -508,11 +513,15 @@ private[spark] class ApplicationMaster(
         val userConf = sc.getConf
         val host = userConf.get(DRIVER_HOST_ADDRESS)
         val port = userConf.get(DRIVER_PORT)
+        // 注册AM, 有webUrl信息
         registerAM(host, port, userConf, sc.ui.map(_.webUrl), appAttemptId)
 
+        //  driverRef: RpcEndpointRef
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)
+
+        // 申请资源, 监控executor
         createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf)
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
@@ -520,6 +529,7 @@ private[spark] class ApplicationMaster(
         throw new IllegalStateException("User did not initialize spark context!")
       }
       resumeDriver()
+      // 等待driver线程结束
       userClassThread.join()
     } catch {
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
@@ -540,9 +550,11 @@ private[spark] class ApplicationMaster(
     val rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
       amCores, true)
 
+    // 注册AM
     // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
     registerAM(hostname, -1, sparkConf, sparkConf.get(DRIVER_APP_UI_ADDRESS), appAttemptId)
 
+    // driver应该启动并且listening, 不像cluster模式, 只需要连接它不需要等待和重试
     // The driver should be up and listening, so unlike cluster mode, just try to connect to it
     // with no waiting or retrying.
     val (driverHost, driverPort) = Utils.parseHostPort(args.userArgs(0))
@@ -551,8 +563,10 @@ private[spark] class ApplicationMaster(
       YarnSchedulerBackend.ENDPOINT_NAME)
     addAmIpFilter(Some(driverRef),
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
+    // 申请资源, 监控executor
     createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId, distCacheConf)
 
+    // 等待结束。client模式, actor会停止reporter thread
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
   }
@@ -846,6 +860,11 @@ object ApplicationMaster extends Logging {
 
   private var master: ApplicationMaster = _
 
+  /**
+   * ApplicationMaster的入口
+   * [[master.run()]]
+   * @param args
+   */
   def main(args: Array[String]): Unit = {
     SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
@@ -921,6 +940,8 @@ object ApplicationMaster extends Logging {
 }
 
 /**
+ * 此对象不提供任何特殊功能。它的存在使得在使用诸如ps或jps之类的工具时很容易区分client模式AM和cluster模式AM。
+ *
  * This object does not provide any special functionality. It exists so that it's easy to tell
  * apart the client-mode AM from the cluster-mode AM when using tools such as ps or jps.
  */

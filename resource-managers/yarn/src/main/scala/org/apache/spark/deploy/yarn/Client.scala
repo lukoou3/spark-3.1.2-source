@@ -71,6 +71,7 @@ private[spark] class Client(
   import Client._
   import YarnSparkHadoopUtil._
 
+  // 创建yarnClient
   private val yarnClient = YarnClient.createYarnClient
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
@@ -178,6 +179,7 @@ private[spark] class Client(
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
+      // 向RM申请创建application
       // Get a new application from our RM
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
@@ -986,6 +988,7 @@ private[spark] class Client(
       } else {
         Nil
       }
+    // ApplicationMaster调用的主类: cluster: ApplicationMaster, client: ExecutorLauncher
     val amClass =
       if (isClusterMode) {
         Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
@@ -1224,6 +1227,7 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
+    // 提交application
     this.appId = submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport(appId)
@@ -1234,6 +1238,7 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
+      // 报告application的状态，直到它成功或由于某些故障退出，然后返回application状态（完成、失败、终止或运行）和最终application状态（未定义、成功、失败或终止）。
       val YarnAppReport(appState, finalState, diags) = monitorApplication(appId)
       if (appState == YarnApplicationState.FAILED || finalState == FinalApplicationStatus.FAILED) {
         diags.foreach { err =>
@@ -1631,6 +1636,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     conf.remove(FILES)
     conf.remove(ARCHIVES)
 
+    // yarn-cluster模式, 就运行Client.run()
     new Client(new ClientArguments(args), conf, null).run()
   }
 

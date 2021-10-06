@@ -41,6 +41,8 @@ private[spark] class YarnClientSchedulerBackend(
   private var monitorThread: MonitorThread = null
 
   /**
+   * 创建一个yarn client以向ResourceManager提交application。
+   * 会等待直到application运行
    * Create a Yarn client to submit an application to the ResourceManager.
    * This waits until the application is running.
    */
@@ -58,6 +60,8 @@ private[spark] class YarnClientSchedulerBackend(
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray)
     totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
+    // yarn-cluster模式, YarnClusterApplication的start方法: new Client(new ClientArguments(args), conf, null).run()
+    // Client.run()中会先调用this.appId = submitApplication(), 然后会一直监控Application, 直到成功结束或错误抛出异常
     client = new Client(args, conf, sc.env.rpcEnv)
     bindToYarn(client.submitApplication(), None)
 

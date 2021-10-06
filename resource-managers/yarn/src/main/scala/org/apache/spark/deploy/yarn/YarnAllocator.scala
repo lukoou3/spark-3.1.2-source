@@ -392,6 +392,7 @@ private[yarn] class YarnAllocator(
     // requests.
     val allocateResponse = amClient.allocate(progressIndicator)
 
+    // RM返回的可分配的容器
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
@@ -404,6 +405,7 @@ private[yarn] class YarnAllocator(
           getNumExecutorsStarting,
           allocateResponse.getAvailableResources))
 
+      // 处理可分配的容器
       handleAllocatedContainers(allocatedContainers.asScala.toSeq)
     }
 
@@ -627,6 +629,7 @@ private[yarn] class YarnAllocator(
       }
     }
 
+    // 运行已分配的容器
     runAllocatedContainers(containersToUse)
 
     logInfo("Received %d containers from YARN, launching executors on %d of them."
@@ -710,6 +713,8 @@ private[yarn] class YarnAllocator(
         if (launchContainers) {
           launcherPool.execute(() => {
             try {
+              // 启动容器
+              // Executor Container运行的这个类org.apache.spark.executor.YarnCoarseGrainedExecutorBackend
               new ExecutorRunnable(
                 Some(container),
                 conf,

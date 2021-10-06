@@ -69,9 +69,20 @@ private[spark] class YarnCoarseGrainedExecutorBackend(
 
 private[spark] object YarnCoarseGrainedExecutorBackend extends Logging {
 
+  /**
+   * yarn Executor的入口
+   * YarnCoarseGrainedExecutorBackend和CoarseGrainedExecutorBackend基本一样
+   * CoarseGrainedExecutorBackend extends RpcEndpoint,
+   * The life-cycle of an endpoint is: constructor -> onStart -> receive* -> onStop
+   * CoarseGrainedExecutorBackend.run中初始化env: SparkEnv后, 调用env.rpcEnv.awaitTermination()等待直到 [[RpcEnv]] exits.
+   * 初始化看 [[CoarseGrainedExecutorBackend.run()]] 和 [[CoarseGrainedExecutorBackend.onStart()]] 即可
+   *
+   * @param args
+   */
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, CoarseGrainedExecutorBackend.Arguments, SparkEnv, ResourceProfile) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile) =>
+      // 返回YarnCoarseGrainedExecutorBackend
       new YarnCoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, arguments.executorId,
         arguments.bindAddress, arguments.hostname, arguments.cores, arguments.userClassPath.toSeq,
         env, arguments.resourcesFileOpt, resourceProfile)

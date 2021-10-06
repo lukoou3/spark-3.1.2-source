@@ -71,6 +71,8 @@ import org.apache.spark.util._
 import org.apache.spark.util.logging.DriverLogger
 
 /**
+ * 一个JVM中只能有一个active的SparkContext, 想要创建一个新的必须SparkContext先stop之前创建的。
+ *
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
@@ -85,10 +87,12 @@ class SparkContext(config: SparkConf) extends Logging {
   private val creationSite: CallSite = Utils.getCallSite()
 
   if (!config.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
+    // 为了防止在executor端创建SparkContext
     // In order to prevent SparkContext from being created in executors.
     SparkContext.assertOnDriver()
   }
 
+  // 为了防止在一个JVM中有多个active的SparkContext
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
@@ -98,6 +102,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
+  // 确保SparkContext not stopped
   private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
       val activeContext = SparkContext.activeContext.get()
@@ -385,6 +390,7 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
+  // 主构造函数逻辑
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -553,10 +559,24 @@ class SparkContext(config: SparkConf) extends Logging {
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this, _resources.asJava)
 
+    /**
+     * 创建(SchedulerBackend, TaskScheduler)
+     * Standalone模式：
+     *    创建TaskSchedulerImpl, StandaloneSchedulerBackend
+     *    会调用scheduler.initialize(backend), scheduler会持有backend的引用: scheduler.backend = backend
+     * yarn模式:
+     *    TaskScheduler:不管是cluster下创建的YarnClusterScheduler还是client下创建的YarnScheduler, 都继承自TaskSchedulerImpl, 基本没修改(重写的方法很少也不重要)
+     *    SchedulerBackend:YarnClusterSchedulerBackend, YarnClientSchedulerBackend, 都继承CoarseGrainedSchedulerBackend
+     *
+     *    client模式: YarnClientSchedulerBackend.start()创建一个yarn client以向ResourceManager提交application, 会等待直到application运行
+     *
+     */
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
+    // SparkContext构建的顶级三大核心: DAGScheduler、TaskScheduler(TaskSchedulerImpl)、SchedulerBackend
     _schedulerBackend = sched
     _taskScheduler = ts
+    // 创建DAGScheduler, dagScheduler持有taskScheduler的引用, DAGScheduler构造函数: def this(sc: SparkContext) = this(sc, sc.taskScheduler)
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
@@ -574,9 +594,14 @@ class SparkContext(config: SparkConf) extends Logging {
       conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
     _heartbeater.start()
 
+    // 启动taskScheduler, 内部调用backend.start()
+    // 下面在最后会调用_taskScheduler.postStartHook(), 内部调用waitBackendReady(), 等待schedulerBackend准备好
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
     _taskScheduler.start()
+
+    // ApplicationMaster调用的主类: cluster: ApplicationMaster, client: ExecutorLauncher
+    // ExecutorLauncher就是调用的ApplicationMaster.main(args), 仅仅是为了使ps/jps等命令能区分cluster/client模式
 
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = _taskScheduler.applicationAttemptId()
@@ -2956,13 +2981,17 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case masterUrl =>
+        // YarnClusterManager(org.apache.spark.scheduler.cluster.YarnClusterManager), 在spark-yarn_2.12包下
         val cm = getClusterManager(masterUrl) match {
           case Some(clusterMgr) => clusterMgr
           case None => throw new SparkException("Could not parse Master URL: '" + master + "'")
         }
         try {
+          // 不管是cluster下创建的YarnClusterScheduler还是client下创建的YarnScheduler, 都继承自TaskSchedulerImpl, 基本没修改(重写的方法很少也不重要), 代码在YarnClusterManager.createTaskScheduler
           val scheduler = cm.createTaskScheduler(sc, masterUrl)
+          // YarnClusterSchedulerBackend, YarnClientSchedulerBackend, 都继承CoarseGrainedSchedulerBackend
           val backend = cm.createSchedulerBackend(sc, masterUrl, scheduler)
+          // 就是调的scheduler.initialize(backend), scheduler会持有backend的引用: scheduler.backend = backend
           cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
