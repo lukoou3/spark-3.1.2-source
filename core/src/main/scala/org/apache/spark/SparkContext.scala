@@ -566,7 +566,7 @@ class SparkContext(config: SparkConf) extends Logging {
      *    会调用scheduler.initialize(backend), scheduler会持有backend的引用: scheduler.backend = backend
      * yarn模式:
      *    TaskScheduler:不管是cluster下创建的YarnClusterScheduler还是client下创建的YarnScheduler, 都继承自TaskSchedulerImpl, 基本没修改(重写的方法很少也不重要)
-     *    SchedulerBackend:YarnClusterSchedulerBackend, YarnClientSchedulerBackend, 都继承CoarseGrainedSchedulerBackend
+     *    SchedulerBackend:YarnClusterSchedulerBackend, YarnClientSchedulerBackend, 都继承[[CoarseGrainedSchedulerBackend]]
      *
      *    client模式: YarnClientSchedulerBackend.start()创建一个yarn client以向ResourceManager提交application, 会等待直到application运行
      *

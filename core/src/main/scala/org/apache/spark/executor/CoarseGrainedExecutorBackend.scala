@@ -80,6 +80,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private var decommissioned = false
 
+  // executor启动就会调用
   override def onStart(): Unit = {
     if (env.conf.get(DECOMMISSION_ENABLED)) {
       logInfo("Registering PWR handler to trigger decommissioning.")
@@ -94,6 +95,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       case NonFatal(e) =>
         exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
     }
+    // 获取driver的EndpointRef
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
@@ -444,14 +446,17 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, arguments.executorId)
+      // 创建executor端的SparkEnv, Create a SparkEnv for an executor.
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
+      // Executor Endpoint, 就是YarnCoarseGrainedExecutorBackend(CoarseGrainedExecutorBackend)
       env.rpcEnv.setupEndpoint("Executor",
         backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile))
       arguments.workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
+      // 阻塞, 等待executor的结束
       env.rpcEnv.awaitTermination()
     }
   }

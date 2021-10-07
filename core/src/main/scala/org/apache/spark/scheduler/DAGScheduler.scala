@@ -2507,6 +2507,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
   }
 }
 
+// https://blog.csdn.net/qq_16669583/article/details/106026722
+// https://blog.csdn.net/qq_16669583/article/details/106026722
 private[spark] object DAGScheduler {
   // The time, in millis, to wait for fetch failure events to stop coming in after one is detected;
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
