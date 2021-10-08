@@ -291,7 +291,8 @@ private[spark] class TaskSchedulerImpl(
      *
      * CoarseGrainedSchedulerBackend.reviveOffers(), 给DriverEndpoint发了个ReviveOffers消息, DriverEndpoint的receive函数中: case ReviveOffers => makeOffers()
      * [[org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.reviveOffers()]]
-     * [[org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.DriverEndpoint]]
+     * [[org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.DriverEndpoint.makeOffers()]]
+     * [[org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.DriverEndpoint.launchTasks(taskDescs)]]
      *
      * DriverEndpoint makeOffers函数:
      *    获取活跃健康的executors

@@ -558,6 +558,14 @@ private[spark] class DAGScheduler(
    *    getOrCreateParentStages调用getOrCreateParentStages调用[[createShuffleMapStage]], createShuffleMapStage逻辑和createResultStage几乎一样, 不会的是返回的ShuffleMapStage
    *    这样只有第一次生成的ResultStage, 之后创建的都是ShuffleMapStage, 每个Stage都有依赖的Stage的引用
    *
+   * task序列化的内容:
+   *   ShuffleMapStage序列化stage.rdd, stage.shuffleDep; 就是shuffleDep.rdd, shuffleDep
+   *   ResultStage序列化stage.rdd, stage.func; 就是job提交的rdd, job提交的func
+   *   因为ShuffleMapStage要把rdd分区的数据写入shuffle, ResultStage要在rdd分区的数据调用函数返回结果到diver
+   *
+   * ResultStage中的rdd就是job提交的rdd, func就是job提交的func
+   * ShuffleMapStage中的rdd就是shuffleDep.rdd, shuffleDep就是shuffleDep
+   *
    * Create a ResultStage associated with the provided jobId.
    */
   private def createResultStage(
@@ -1448,6 +1456,13 @@ private[spark] class DAGScheduler(
       // this synchronization in case another concurrent job is checkpointing this RDD, so we get a
       // consistent view of both variables.
       RDDCheckpointData.synchronized {
+        /**
+         * task序列化的内容
+         *    ShuffleMapStage序列化stage.rdd, stage.shuffleDep
+         *    ResultStage序列化stage.rdd, stage.func
+         *
+         * ShuffleMapStage要把rdd分区的数据写入shuffle, ResultStage要在rdd分区的数据调用函数返回结果到diver
+         */
         taskBinaryBytes = stage match {
           case stage: ShuffleMapStage =>
             JavaUtils.bufferToArray(

@@ -37,6 +37,19 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
   }
 
   /**
+   * shuffle write实现, 根据ShuffleDependency中的shuffleHandle获取对应的ShuffleWriter, 把rdd分区的iterator写入ShuffleWriter
+   *    SerializedShuffleHandle => UnsafeShuffleWriter,
+   *    BypassMergeSortShuffleHandle => BypassMergeSortShuffleWriter,
+   *    BaseShuffleHandle => SortShuffleWriter
+   *
+   * ShuffleDependency中的shuffleHandle是在ShuffleDependency构造函数的舒适化中根据条件确定的
+   * 获取shuffleHandle在[[ShuffleManager.registerShuffle()]]中, ShuffleManager似乎就SortShuffleManager一个实现类,
+   *
+   * 也是就使用哪个ShuffleWriter是由[[org.apache.spark.shuffle.sort.SortShuffleManager.registerShuffle()]]函数决定的
+   *    map端没有聚合操作，且分区必须小于200; BypassMergeSortShuffleHandle => BypassMergeSortShuffleWriter
+   *    map端没有聚合操作，需要Serializer支持relocation，分区数目必须小于 16777216; SerializedShuffleHandle => UnsafeShuffleWriter
+   *    否则, BaseShuffleHandle => SortShuffleWriter
+   *
    * The write process for particular partition, it controls the life circle of [[ShuffleWriter]]
    * get from [[ShuffleManager]] and triggers rdd compute, finally return the [[MapStatus]] for
    * this task.

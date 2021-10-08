@@ -264,6 +264,20 @@ private[spark] class Executor(
     decommissioned = true
   }
 
+  /**
+   * 反序列化TaskDescription中的Task
+   * 接下来调用task.run, run 中调用runTask方法, 具体实现看ResultTask和ShuffleMapTask的runTask方法
+   * 不管是ResultTask还是ShuffleMapTask都会调用stage的最后一个rdd的iterator方法,
+   * 不同的是ShuffleMapTask把分区数据写入shuffle, ResultTask是在分区数据应用func并把结果返回driver端
+   *
+   * 看这两个函数就行: [[ShuffleMapTask.runTask()]], [[ResultTask.runTask()]]
+   *
+   * 关于shuffle的写和读, 需要看: [[ShuffleMapTask.runTask()]], [[org.apache.spark.rdd.ShuffledRDD.compute()]]
+   * shuffle写三种ShuffleWriter:BypassMergeSortShuffleWriter, UnsafeShuffleWriter, SortShuffleWriter
+   * shuffle读调用的就是[[org.apache.spark.shuffle.BlockStoreShuffleReader.read()]]
+   *
+   * shuffle的写和读详细的流程暂时没必要看, 和文件和网络有关, 估计十分复杂
+   */
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     // TaskRunner extends Runnable
     val tr = new TaskRunner(context, taskDescription, plugins)
