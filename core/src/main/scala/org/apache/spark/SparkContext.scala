@@ -2226,7 +2226,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
-    // 运行job，知道job结束，同步的方法
+    // 向dagScheduler提交job。运行job，直到job结束，同步的方法
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()

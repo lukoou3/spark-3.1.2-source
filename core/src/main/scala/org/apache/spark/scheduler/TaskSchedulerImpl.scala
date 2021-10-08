@@ -231,11 +231,18 @@ private[spark] class TaskSchedulerImpl(
     waitBackendReady()
   }
 
+  /**
+   * DAGScheduler中提交taskSet的入口, 逻辑相对stage提交比较简单
+   * taskSet封装成TaskSetManager加入调度器(rootPool), 两种策略: FIFO, Fair
+   * 为每个可用的executor分配task, 给executor发送LaunchTask的消息, 对应的executor端在CoarseGrainedExecutorBackend的receive函数中有case LaunchTask(data)的处理
+   */
   override def submitTasks(taskSet: TaskSet): Unit = {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks "
       + "resource profile " + taskSet.resourceProfileId)
+    // 加锁
     this.synchronized {
+      // taskSet进一步封装成TaskSetManager: 单个TaskSet的调度, 实现失败重试, 位置感知
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
@@ -254,6 +261,13 @@ private[spark] class TaskSchedulerImpl(
         ts.isZombie = true
       }
       stageTaskSets(taskSet.stageAttemptId) = manager
+
+
+      /**
+       * 添加TaskSetManager到调度器, SchedulableBuilder接口有两个实现类FIFOSchedulableBuilder, FairSchedulableBuilder
+       * 最终都添加到了[[rootPool]]中, 创建schedulableBuilder时把rootPool传入了它的构造函数
+       * 所以之后调用[[resourceOffers(workOffers)]]函数获取需要运行的taskDescs时, 能从rootPool获取taskSets
+       */
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -271,6 +285,19 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+
+    /**
+     * 获取executors, 为其分配task, 给executor发送LaunchTask的消息运行task
+     *
+     * CoarseGrainedSchedulerBackend.reviveOffers(), 给DriverEndpoint发了个ReviveOffers消息, DriverEndpoint的receive函数中: case ReviveOffers => makeOffers()
+     * [[org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.reviveOffers()]]
+     * [[org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.DriverEndpoint]]
+     *
+     * DriverEndpoint makeOffers函数:
+     *    获取活跃健康的executors
+     *    然后调用TaskSchedulerImpl(this)的 [[resourceOffers(workOffers)]]函数获取需要运行的taskDescs,
+     *    然后调用launchTasks(taskDescs), 给executor发送LaunchTask的消息, 对应的executor端在CoarseGrainedExecutorBackend的receive函数中有case LaunchTask(data)的处理
+     */
     backend.reviveOffers()
   }
 
@@ -353,6 +380,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
+   * 为单个TaskSet在executors中分配任务, 遍历executor, 每一个executor分配一个符合本地性要求的任务
    * Offers resources to a single [[TaskSetManager]] at a given max allowed [[TaskLocality]].
    *
    * @param taskSet task set manager to offer resources to
@@ -380,6 +408,7 @@ private[spark] class TaskSchedulerImpl(
     var minLaunchedLocality: Option[TaskLocality] = None
     // nodes and executors that are excluded for the entire application have already been
     // filtered out by this point
+    // 遍历executor, 每一个executor分配一个符合本地性要求的任务
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
       val host = shuffledOffers(i).host
@@ -393,6 +422,7 @@ private[spark] class TaskSchedulerImpl(
           try {
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
+            // 返回taskSet中最符合这个executor本地化的task, taskDescOption: Option[TaskDescription]
             val (taskDescOption, didReject) =
               taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments)
             noDelayScheduleRejects &= !didReject
@@ -485,6 +515,10 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
+   * 为每个Executor分配任务
+   * 每一个TaskSet，按照对executor进行round-robin的方式分配任务，会进行多轮分配，每一轮依次轮询所有的executor，为每一个executor分配一个最大符合本地性要求的任务
+   * 返回的Seq[Seq[TaskDescription]] size = 过滤过的executors.size, Seq[TaskDescription]是给某个Executor分配的任务
+   *
    * Called by cluster manager to offer resources on workers. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
@@ -528,6 +562,7 @@ private[spark] class TaskSchedulerImpl(
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
     // close estimate
+    // 需要在Executor上运行的任务: tasks: IndexedSeq[ArrayBuffer[TaskDescription]], 每个Executor上可运行的任务: cores / CPUS_PER_TASK, 默认就是可用的核数
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -576,6 +611,7 @@ private[spark] class TaskSchedulerImpl(
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
+            // 每一个TaskSet，按照对executor进行round-robin的方式分配任务，会进行多轮分配，每一轮依次轮询所有的executor，为每一个executor分配一个最大符合本地性要求的任务
             val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
               taskSet, currentMaxLocality, shuffledOffers, availableCpus,
               availableResources, tasks, addressesWithDescs)

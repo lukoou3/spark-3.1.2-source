@@ -385,6 +385,7 @@ private[spark] class DAGScheduler(
   private def getOrCreateShuffleMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
       firstJobId: Int): ShuffleMapStage = {
+    // 存在直接返回, 否则创建ShuffleMapStage
     shuffleIdToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) =>
         stage
@@ -423,6 +424,7 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * 根据ShuffleDependency创建ShuffleMapStage
    * Creates a ShuffleMapStage that generates the given shuffle dependency's partitions. If a
    * previously run stage generated the same shuffle data, this function will copy the output
    * locations that are still available from the previous shuffle to avoid unnecessarily
@@ -550,6 +552,12 @@ private[spark] class DAGScheduler(
   /**
    * 创建最后一个finalStage: ResultStage, finalStage中有依赖List[ShuffleMapStage]的引用
    * ShuffleMapStage中又会保存其依赖的List[ShuffleMapStage]的引用
+   *
+   * [[getShuffleDependenciesAndResourceProfiles]] 函数返回直接依赖的ShuffleDependency
+   * [[getOrCreateParentStages]] 函数转换直接依赖的ShuffleDependency为接依赖的List[ShuffleMapStage]
+   *    getOrCreateParentStages调用getOrCreateParentStages调用[[createShuffleMapStage]], createShuffleMapStage逻辑和createResultStage几乎一样, 不会的是返回的ShuffleMapStage
+   *    这样只有第一次生成的ResultStage, 之后创建的都是ShuffleMapStage, 每个Stage都有依赖的Stage的引用
+   *
    * Create a ResultStage associated with the provided jobId.
    */
   private def createResultStage(
@@ -558,15 +566,16 @@ private[spark] class DAGScheduler(
       partitions: Array[Int],
       jobId: Int,
       callSite: CallSite): ResultStage = {
-    // 返回rdd依赖的父ShuffleDependency(遇到一个ShuffleDependency不会再返回此ShuffleDependency的依赖)
+    // 返回rdd依赖的父ShuffleDependency(只返回一级, 遇到一个ShuffleDependency不会再返回此ShuffleDependency的依赖)
     val (shuffleDeps, resourceProfiles) = getShuffleDependenciesAndResourceProfiles(rdd)
     val resourceProfile = mergeResourceProfilesForStage(resourceProfiles)
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, partitions.toSet.size)
-    // 创建返回依赖的List[ShuffleMapStage]
+    // 创建返回依赖的List[ShuffleMapStage], 里面每个ShuffleMapStage也都会调用getOrCreateParentStages, 像rdd一样每个Stage都能追溯到依赖的Stage
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
+    // 创建ResultStage, 里面包含依赖的List[ShuffleMapStage](parents: List[Stage])
     val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
       callSite, resourceProfile.id)
     stageIdToStage(id) = stage
@@ -581,6 +590,7 @@ private[spark] class DAGScheduler(
   private def getOrCreateParentStages(shuffleDeps: HashSet[ShuffleDependency[_, _, _]],
       firstJobId: Int): List[Stage] = {
     shuffleDeps.map { shuffleDep =>
+      // 根据shuffle dependencies创建ShuffleMapStage
       getOrCreateShuffleMapStage(shuffleDep, firstJobId)
     }.toList
   }
@@ -815,14 +825,16 @@ private[spark] class DAGScheduler(
     // maxPartitions就是job最后一个stage的并行度
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
+    // 检查提交运行的分区是否是存在的分区
     partitions.find(p => p >= maxPartitions || p < 0).foreach { p =>
       throw new IllegalArgumentException(
         "Attempting to access a non-existent partition: " + p + ". " +
           "Total number of partitions: " + maxPartitions)
     }
 
-    // 生成jobId, 调用AtomicInteger的getAndIncrement
+    // 生成jobId, 调用AtomicInteger的getAndIncrement, 保证线程安全
     val jobId = nextJobId.getAndIncrement()
+    // 如果partitions为空，则说明没有task任务，则直接返回jobWaiter并且发送监听事件表明任务结束
     if (partitions.isEmpty) {
       val clonedProperties = Utils.cloneProperties(properties)
       if (sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) == null) {
@@ -841,8 +853,11 @@ private[spark] class DAGScheduler(
     // 这是把func的泛型给去掉?估计是JobSubmitted参数是格式是: func: (TaskContext, Iterator[_]) => _
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
-    // job提交事件放到任务循环中, eventProcessLoop是DAGSchedulerEventProcessLoop类
-    // 接受事件处理函数是onReceive, 里面调用的是doOnReceive, 里面调用的是DAGScheduler的handleJobSubmitted
+    /**
+     * job提交事件放到任务循环中, eventProcessLoop是DAGSchedulerEventProcessLoop类
+     * 接受事件处理函数是onReceive, 里面调用的是doOnReceive, 里面调用的是DAGScheduler的handleJobSubmitted
+     * 所以接下来直接看[[handleJobSubmitted]]函数即可
+     */
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
       Utils.cloneProperties(properties)))
@@ -874,7 +889,7 @@ private[spark] class DAGScheduler(
     val start = System.nanoTime
     // 提交job, 返回类型Future的对象
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    // 等待知道job结束
+    // 等待直到job结束
     ThreadUtils.awaitReady(waiter.completionFuture, Duration.Inf)
     // 成功打印job信息, 失败则抛出异常
     waiter.completionFuture.value.get match {
@@ -1122,7 +1137,10 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * 处理job提交的函数, 在这个函数中划分stage
+   * 处理job提交的函数
+   *    1.划分stage, finalStage = [[createResultStage]]
+   *    2.提交stage, [[submitStage(finalStage)]]
+   *
    * @param jobId
    * @param finalRDD 通过传入的最后一个rdd可以生成划分stage
    * @param func (TaskContext, Iterator[_]) => _, 就是sc.runJob传入的func: (TaskContext, Iterator[T]) => U
@@ -1140,7 +1158,17 @@ private[spark] class DAGScheduler(
       properties: Properties): Unit = {
     var finalStage: ResultStage = null
     try {
-      // 创建最后一个finalStage: ResultStage, finalStage中有之前stage的引用
+      /**
+       * 创建最后一个finalStage: ResultStage, finalStage中有直接依赖List[ShuffleMapStage]的引用
+       * ShuffleMapStage中又会保存其依赖的List[ShuffleMapStage]的引用
+       *
+       * [[getShuffleDependenciesAndResourceProfiles]] 函数返回直接依赖的ShuffleDependency
+       * [[getOrCreateParentStages]] 函数转换直接依赖的ShuffleDependency为接依赖的List[ShuffleMapStage]
+       *    getOrCreateParentStages调用getOrCreateParentStages调用[[createShuffleMapStage]], createShuffleMapStage逻辑和createResultStage几乎一样, 不会的是返回的ShuffleMapStage
+       *    这样只有第一次生成的ResultStage, 之后创建的都是ShuffleMapStage, 每个Stage都有依赖的Stage的引用
+       *
+       * Create a ResultStage associated with the provided jobId.
+       */
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
@@ -1196,6 +1224,7 @@ private[spark] class DAGScheduler(
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos,
         Utils.cloneProperties(properties)))
+    // 从finalStage开始，根据RDD的依赖关系，递归提交所有的Stage
     submitStage(finalStage)
   }
 
@@ -1243,6 +1272,20 @@ private[spark] class DAGScheduler(
     }
   }
 
+  /**
+   * 提交stage
+   *    存在missingParentStages, 先递归地提交依赖的父stage(missingParentStages), 把该stage放到waitingStages中;
+   *    不存在missingParentStages, 在这个stage上调用 [[submitMissingTasks]]
+   *
+   * [[submitMissingTasks(stage, jobId)]]函数中, 根据stage生成的tasks:
+   *    如果tasks不为空, 则提交给taskScheduler处理, [[taskScheduler.submitTasks(new TaskSet(tasks.toArray))]]
+   *    如果tasks为空, 调用[[submitWaitingChildStages(stage)]], 删除waitingStages中依赖此stage的stage, 并且提交: submitStage(stage)
+   *
+   * task完成的回调函数[[handleTaskCompletion]]中也会调用submitWaitingChildStages(stage), 删除waitingStages中依赖此stage的stage, 并且提交: submitStage(stage)
+   *
+   * 所以最终每个stage都会被调用[[submitMissingTasks]], 生成tasks, 提交给taskScheduler, task的调度就需要看 [[TaskSchedulerImpl.submitTasks()]]
+   * 不管是cluster下创建的YarnClusterScheduler还是client下创建的YarnScheduler, 都继承自TaskSchedulerImpl, 基本没修改(重写的方法很少也不重要), 代码在YarnClusterManager.createTaskScheduler
+   */
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage): Unit = {
     val jobId = activeJobForStage(stage)
@@ -1254,11 +1297,11 @@ private[spark] class DAGScheduler(
         val missing = getMissingParentStages(stage).sortBy(_.id)
         logDebug("missing: " + missing)
         if (missing.isEmpty) {
-          // 依赖的ShuffleMapStage都完成, 提交最后一个stage
+          // 没有依赖的missing ShuffleMapStage
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
           submitMissingTasks(stage, jobId.get)
         } else {
-          // 先提交依赖
+          // 先提交依赖, 递归调用
           for (parent <- missing) {
             submitStage(parent)
           }
@@ -1479,7 +1522,7 @@ private[spark] class DAGScheduler(
     if (tasks.nonEmpty) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
-      // 封装成TaskSet提交到调度器, 之后会调度每个task在Executor上, Executor收到task反序列化后运行
+      // 封装成TaskSet提交到taskScheduler, 之后会调度每个task在Executor上, Executor收到task反序列化后运行
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,
         stage.resourceProfileId))

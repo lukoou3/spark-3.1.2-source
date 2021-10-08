@@ -308,9 +308,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
                 (rName, rInfo.availableAddrs.toBuffer)
               }, executorData.resourceProfileId)
         }.toIndexedSeq
+
+        /**
+         * 为每个Executor分配任务
+         * 每一个TaskSet，按照对executor进行round-robin的方式分配任务，会进行多轮分配，每一轮依次轮询所有的executor，为每一个executor分配一个最大符合本地性要求的任务
+         * 返回的Seq[Seq[TaskDescription]] size = 过滤过的executors.size, Seq[TaskDescription]是给某个Executor分配的任务
+         */
         scheduler.resourceOffers(workOffers, true)
       }
       if (taskDescs.nonEmpty) {
+        // 启动tasks
         launchTasks(taskDescs)
       }
     }
@@ -351,6 +358,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
       for (task <- tasks.flatten) {
         val serializedTask = TaskDescription.encode(task)
+        // serializedTask的大小有限制
         if (serializedTask.limit() >= maxRpcMessageSize) {
           Option(scheduler.taskIdToTaskSetManager.get(task.taskId)).foreach { taskSetMgr =>
             try {
@@ -365,6 +373,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
         else {
+          // TaskDescription中有executorId
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
@@ -380,6 +389,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
 
+          // 给executor发送LaunchTask的消息, 对应的在CoarseGrainedExecutorBackend的receive函数中有case LaunchTask(data)的处理
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
