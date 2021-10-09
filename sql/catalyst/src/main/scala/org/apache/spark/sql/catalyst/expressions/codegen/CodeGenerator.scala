@@ -1809,6 +1809,7 @@ object CodeGenerator extends Logging {
   def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
 
   /**
+   * 返回spark sql DataType对应的java类型, 可以看到DateType,TimestampType底层是用int,long表示的
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {

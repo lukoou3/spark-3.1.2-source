@@ -160,6 +160,7 @@ case class ScalaUDF(
       }
       (converter, true)
     } else { // use CatalystTypeConverters
+      // spark sql中的数据转成scala类型, 就是在这把DateType转成java.sql.Date, 而saprk底层用的是int
       (catalystCreateToScalaConverter(dataType), false)
     }
   }
