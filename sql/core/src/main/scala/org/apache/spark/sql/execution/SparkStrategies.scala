@@ -103,6 +103,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * [[JoinSelection]]类决定使用哪种join, 类的注释写的还是挺详细的
+   *
    * Select the proper physical plan for join based on join strategy hints, the availability of
    * equi-join keys and the sizes of joining relations. Below are the existing join strategies,
    * their characteristics and their limitations.
@@ -228,6 +230,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
+        /**
+         * 先根据hint生成join, 没hint则调用[[createJoinWithoutHint]]
+         * createJoinWithoutHint一次判断, 默认就是BroadcastHashJoin, SortMergeJoin; ShuffleHashJoin需要配置"spark.sql.join.preferSortMergeJoin"为false:
+         *    [[createBroadcastHashJoin]]
+         *    !conf.preferSortMergeJoin && [[createShuffleHashJoin]]
+         *    [[createSortMergeJoin]]
+         *    [[createCartesianProduct]]
+         *    都不满足则 [[joins.BroadcastNestedLoopJoinExec]]
+         */
         createBroadcastHashJoin(true)
           .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
           .orElse(createShuffleHashJoin(true))

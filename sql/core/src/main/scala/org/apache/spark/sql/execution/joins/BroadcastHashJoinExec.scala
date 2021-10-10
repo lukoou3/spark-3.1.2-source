@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
+ * spark sql BroadcastHashJoin实现
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
  * being constructed, a Spark job is asynchronously started to calculate the values for the
  * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed

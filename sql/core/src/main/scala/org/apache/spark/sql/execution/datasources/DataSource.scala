@@ -656,9 +656,11 @@ object DataSource extends Logging {
     }
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
+    // 默认加载继承DataSourceRegister的数据源
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
     try {
+      // 先按照shortName过滤, 接着尝试加载属于的path作为类(provider1, s"$provider1.DefaultSource")
       serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
         // the provider format did not match any given registered aliases
         case Nil =>

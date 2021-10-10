@@ -66,6 +66,9 @@ trait BroadcastExchangeLike extends Exchange {
 }
 
 /**
+ * spark sql Broadcast实现, 异步Broadcast, 超时失败
+ * 使用了[[scala.concurrent.Promise]], [[scala.concurrent.Future]]; 可以学习一下
+ * java中的[[Future]]也使用了
  * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of
  * a transformed SparkPlan.
  */
@@ -139,6 +142,7 @@ case class BroadcastExchangeExec(
             }
 
             longMetric("dataSize") += dataSize
+            // 最大广播8GB: 8L << 30
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw new SparkException(
                 s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")

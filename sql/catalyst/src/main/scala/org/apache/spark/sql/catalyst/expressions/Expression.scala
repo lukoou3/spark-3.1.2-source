@@ -521,6 +521,7 @@ abstract class UnaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
+      // 构建自己的插值字符串, implicit class BlockHelper(val sc: StringContext) extends AnyVal
       ev.copy(code = code"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};

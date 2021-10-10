@@ -170,6 +170,7 @@ class SparkSession private(
   val sqlContext: SQLContext = new SQLContext(this)
 
   /**
+   * 可以通过conf属性设置spark sql的配置, 对SQLConf包装, 实际调用的是SQLConf的方法
    * Runtime configuration interface for Spark.
    *
    * This is the interface through which the user can get and set all Spark and Hadoop

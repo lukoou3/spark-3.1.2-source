@@ -188,7 +188,9 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def clone(): FunctionRegistry = this
 }
 
-
+/**
+ * 内置注册的函数
+ */
 object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression

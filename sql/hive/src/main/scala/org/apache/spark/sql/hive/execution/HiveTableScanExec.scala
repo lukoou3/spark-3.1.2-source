@@ -43,6 +43,7 @@ import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
 
 /**
+ * hive表读取, metrics中有numOutputRows
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.

@@ -3128,6 +3128,9 @@ object SQLConf {
 }
 
 /**
+ * spark sql的参数配置, 线程安全的, settings = java.util.Collections.synchronizedMap(new java.util.HashMap[String, String]())
+ *
+ *
  * A class that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands

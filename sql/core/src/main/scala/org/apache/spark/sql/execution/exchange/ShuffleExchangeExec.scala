@@ -94,6 +94,7 @@ case object REPARTITION extends ShuffleOrigin
 case object REPARTITION_WITH_NUM extends ShuffleOrigin
 
 /**
+ * spark sql Shuffle实现, 含有metrics
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(

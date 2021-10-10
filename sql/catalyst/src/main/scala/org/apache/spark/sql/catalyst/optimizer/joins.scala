@@ -215,6 +215,9 @@ case object BuildRight extends BuildSide
 
 case object BuildLeft extends BuildSide
 
+/**
+ * 判断使用什么方式join
+ */
 trait JoinSelectionHelper {
 
   def getBroadcastBuildSide(
@@ -227,6 +230,8 @@ trait JoinSelectionHelper {
     val buildLeft = if (hintOnly) {
       hintToBroadcastLeft(hint)
     } else {
+      // 判断是否Broadcast, 数据小并且hint没配置NotBroadcast
+      // plan.stats.sizeInBytes <= "spark.sql.autoBroadcastJoinThreshold"("10MB")
       canBroadcastBySize(left, conf) && !hintToNotBroadcastLeft(hint)
     }
     val buildRight = if (hintOnly) {
@@ -252,6 +257,7 @@ trait JoinSelectionHelper {
     val buildLeft = if (hintOnly) {
       hintToShuffleHashJoinLeft(hint)
     } else {
+      // muchSmaller: Returns whether plan a is much smaller (3X) than plan b.
       canBuildLocalHashMapBySize(left, conf) && muchSmaller(left, right)
     }
     val buildRight = if (hintOnly) {
