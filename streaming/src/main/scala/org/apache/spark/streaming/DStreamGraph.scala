@@ -28,8 +28,15 @@ import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.Utils
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
-
+  /**
+   * KafkaUtils.createDirectStream创建的DirectKafkaInputDStream extends InputDStream[ConsumerRecord[K, V]](_ssc)
+   * InputDStream的构造函数中ssc.graph.addInputStream(this), DirectKafkaInputDStream创建的时候回直接添加到inputStreams里
+   */
   private var inputStreams = mutable.ArraySeq.empty[InputDStream[_]]
+  /**
+   * DStream的foreachRDD方法会创建一个新的ForEachDStream调用DStream.register()把DStream添加到outputStreams
+   * ForEachDStream中有我们传入的foreachFunc
+   */
   private var outputStreams = mutable.ArraySeq.empty[DStream[_]]
 
   @volatile private var inputStreamNameAndID: Seq[(String, Int)] = Nil
@@ -50,6 +57,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       outputStreams.foreach(_.initialize(zeroTime))
       outputStreams.foreach(_.remember(rememberDuration))
       outputStreams.foreach(_.validateAtStart())
+      // 不用ReceiverInputDStream, numReceivers就是0
       numReceivers = inputStreams.count(_.isInstanceOf[ReceiverInputDStream[_]])
       inputStreamNameAndID = inputStreams.map(is => (is.name, is.id)).toSeq
       new ParVector(inputStreams.toVector).foreach(_.start())
@@ -116,6 +124,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def getInputStreamNameAndID: Seq[(String, Int)] = inputStreamNameAndID
 
+  // 每隔batchDuration时间会被调用
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)
     val jobs = this.synchronized {

@@ -59,6 +59,19 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
+  /**
+   * timer负责定期的发送GenerateJobs的事件, start方法中会调用timer.start
+   * timer中有个线程每隔batchDuration时间, 调用一下传入的callback, 也就是eventLoop.post(GenerateJobs(new Time(longTime))), "JobGenerator")
+   * 每隔batchDuration时间, 会调用本类的[[processEvent(event)]], 进而调用[[generateJobs(time)]], 进而调用[[graph.generateJobs(time)]]
+   * 每个周期生成jobs后, 调用[[jobScheduler.submitJobSet]], 会回调我们传入的callback
+   * generateJobs(time)会调用[[org.apache.spark.streaming.dstream.ForEachDStream.generateJob()]]生成job,
+   * job实际调用的就是我们传入的foreachRDD的foreachFunc函数, 每个批次的rdd就是DirectKafkaInputDStream的compute方法生成的rdd
+   * DirectKafkaInputDStream每个批次生成的rdd就是KafkaRDD, KafkaRDD的compute方法(每个分区)是读取上次的offset到最新时间的offset
+   * 消费当然会考虑我们配置的参数(spark.streaming.kafka.maxRatePerPartition), 逻辑就在第一行: val untilOffsets = clamp(latestOffsets()) 中
+   * DirectKafkaInputDStream生成的KafkaRDD每个分区是直接连接Kafka的分区按照offset读取的数据, 所以不必但系调用rdd.isempty等是否影响之后的调用会少数据
+   *    直接连接Kafka的分区, 也就不像其他ReceiverInputDStream需要额外的不间断流不停的读数据到block, 需要单独的读取数据的核数
+   *    spark streaming和flink的模式不一样, 基于微批实现的, 操作的rdd和离线没啥区别, 就是每个批次操作的rdd数据不一样而已
+   */
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
     longTime => eventLoop.post(GenerateJobs(new Time(longTime))), "JobGenerator")
 
@@ -87,6 +100,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // See SPARK-10125
     checkpointWriter
 
+    // 时间循环, eventLoop.post() 把event添加到队列
     eventLoop = new EventLoop[JobGeneratorEvent]("JobGenerator") {
       override protected def onReceive(event: JobGeneratorEvent): Unit = processEvent(event)
 
@@ -183,6 +197,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private def processEvent(event: JobGeneratorEvent): Unit = {
     logDebug("Got event " + event)
     event match {
+      // 生成jobs
       case GenerateJobs(time) => generateJobs(time)
       case ClearMetadata(time) => clearMetadata(time)
       case DoCheckpoint(time, clearCheckpointDataLater) =>

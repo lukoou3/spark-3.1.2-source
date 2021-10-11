@@ -129,11 +129,13 @@ class StreamingContext private[streaming] (
       null)
   }
 
+  // sc和cp不能同时为null
   require(_sc != null || _cp != null,
     "Spark Streaming cannot be initialized with both SparkContext and checkpoint as null")
 
   private[streaming] val isCheckpointPresent: Boolean = _cp != null
 
+  // 不传sc时, 可以从cp恢复
   private[streaming] val sc: SparkContext = {
     if (_sc != null) {
       _sc
@@ -144,6 +146,7 @@ class StreamingContext private[streaming] (
     }
   }
 
+  // 使用receivers时, 会有额外的task一直单独运行来接收数据, 核数不够自己的任务就没法运行, 不是local模式也有可能
   if (sc.conf.get("spark.master") == "local" || sc.conf.get("spark.master") == "local[1]") {
     logWarning("spark.master should be set as local[n], n > 1 in local mode if you have receivers" +
       " to get data, otherwise Spark jobs will not get resources to process the received data.")
@@ -154,18 +157,21 @@ class StreamingContext private[streaming] (
   private[streaming] val env = sc.env
 
   private[streaming] val graph: DStreamGraph = {
+    // 从cp恢复, 逻辑都是之前的, 不能修改
     if (isCheckpointPresent) {
       _cp.graph.setContext(this)
       _cp.graph.restoreCheckpointData()
       _cp.graph
     } else {
       require(_batchDur != null, "Batch duration for StreamingContext cannot be null")
+      // 新建DStreamGraph, 必须设置BatchDuration, 也就是Duration
       val newGraph = new DStreamGraph()
       newGraph.setBatchDuration(_batchDur)
       newGraph
     }
   }
 
+  // 和spark core的调度一样
   private val nextInputStreamId = new AtomicInteger(0)
 
   private[streaming] var checkpointDir: String = {
@@ -177,10 +183,13 @@ class StreamingContext private[streaming] (
     }
   }
 
+  // cp的Duration
   private[streaming] val checkpointDuration: Duration = {
     if (isCheckpointPresent) _cp.checkpointDuration else graph.batchDuration
   }
 
+  // job scheduler, JobScheduler有JobGenerator引用, JobScheduler有DStreamGraph引用
+  // jobGenerator和graph的start都是通过JobScheduler的start调用的, 也都是在StreamingContext
   private[streaming] val scheduler = new JobScheduler(this)
 
   private[streaming] val waiter = new ContextWaiter
@@ -569,6 +578,7 @@ class StreamingContext private[streaming] (
    * @throws IllegalStateException if the StreamingContext is already stopped.
    */
   def start(): Unit = synchronized {
+    // 三种状态: INITIALIZED, ACTIVE, STOPPED
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
@@ -587,6 +597,7 @@ class StreamingContext private[streaming] (
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
               savedProperties.set(Utils.cloneProperties(sparkContext.localProperties.get()))
+              // start JobScheduler
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
