@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * network package工具类, 提供字节时间转换等函数
  * General utilities available in the network package. Many of these are sourced from Spark's
  * own Utils, just accessible within this package.
  */

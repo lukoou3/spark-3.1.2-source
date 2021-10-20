@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 
 /**
+ * hdfs工具类
  * Utility functions to simplify and speed-up file listing.
  */
 private[spark] object HadoopFSUtils extends Logging {
