@@ -661,6 +661,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.count()
         2
         """
+        # 就是调用scala的DataFrame的count
         return int(self._jdf.count())
 
     def collect(self):

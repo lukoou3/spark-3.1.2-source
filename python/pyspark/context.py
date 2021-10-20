@@ -118,6 +118,7 @@ class SparkContext(object):
     ValueError: ...
     """
 
+    # _gateway, _jvm都是SparkContext类的属性, 也说明只能同时启动一个scala的SparkContext
     _gateway = None
     _jvm = None
     _next_accum_id = 0
@@ -205,6 +206,8 @@ class SparkContext(object):
 
         self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED", "0")
 
+        # 这里咋还咋还创建了一个JavaSparkContext, 可以看到创建java的对象就像使用python一样: return self._jvm.JavaSparkContext(jconf)
+        # 先看看SparkSession吧, 现在主要也是使用的SparkSession的api
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
         # Reset the SparkConf to the one actually used by the SparkContext in JVM.
@@ -328,10 +331,13 @@ class SparkContext(object):
         """
         with SparkContext._lock:
             if not SparkContext._gateway:
+                # _gateway和_jvm都赋值给了SparkContext类对象
                 # 初始化gateway, 实现和java进程通信的关键
                 SparkContext._gateway = gateway or launch_gateway(conf)
+                # jvm属性是JavaGateway的属性, py4j应该已经处理好了
                 SparkContext._jvm = SparkContext._gateway.jvm
 
+            # 不能在一个进程中创建多个SparkContext, 和scala中一样
             if instance:
                 if (SparkContext._active_spark_context and
                         SparkContext._active_spark_context != instance):

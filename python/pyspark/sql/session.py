@@ -228,6 +228,7 @@ class SparkSession(SparkConversionMixin):
                         sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
                     # by all sessions.
+                    # 先创建SparkContext, 然后获取SparkSession
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session._jsparkSession.sessionState().conf().setConfString(key, value)
@@ -241,6 +242,13 @@ class SparkSession(SparkConversionMixin):
 
     def __init__(self, sparkContext, jsparkSession=None):
         from pyspark.sql.context import SQLContext
+        # SparkSession中也都有jsc, jvm, jsparkSession的引用
+        # 接下来直接看spark.sql(sql).count()怎么运行的就清楚pyspark的原理了
+        # 可以看到pyspark的DataFrame就是对scala的DataFrame做了一个包装
+        # pyspark的DataFrame的方法基本都是直接调用的scala的DataFrame的方法, 比如def count(self): return int(self._jdf.count())
+        # 所以使用pyspark开发spark sql和使用scala/java的运行效率基本一样, 损耗的就是python进程和java进程通过Py4J通信的损耗,
+        # 在不使用toPandas()等把大量数据反序列化到python driver进程中时,  pyspark和scala的spark sql的执行效率几乎一样
+        # 自定义函数时使用scala或者java的函数就不会有性能的开销：方式1使用pyspark的api注册java类, 方式2直接通过spark._jvm调用scala代码注册函数
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
@@ -720,6 +728,7 @@ class SparkSession(SparkConversionMixin):
         >>> df2.collect()
         [Row(f1=1, f2='row1'), Row(f1=2, f2='row2'), Row(f1=3, f2='row3')]
         """
+        # 可以看到pyspark的DataFrame就是对scala的DataFrame做了一个包装
         return DataFrame(self._jsparkSession.sql(sqlQuery), self._wrapped)
 
     def table(self, tableName):
