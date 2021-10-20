@@ -32,8 +32,14 @@ import org.apache.spark.internal.Logging
 private[spark] object PythonGatewayServer extends Logging {
   initializeLogIfNecessary(true)
 
+  /**
+   * 直接运行python文件和再jupyter notebook中运行pyspark, spark driver端运行的主类入口
+   *
+   */
   def main(args: Array[String]): Unit = {
+    // 初始化SparkConf
     val sparkConf = new SparkConf()
+    // 创建Py4JServer, python进程和java进程通信就靠这个
     val gatewayServer: Py4JServer = new Py4JServer(sparkConf)
 
     gatewayServer.start()
@@ -51,6 +57,7 @@ private[spark] object PythonGatewayServer extends Logging {
     val tmpPath = Files.createTempFile(connectionInfoPath.getParentFile().toPath(),
       "connection", ".info").toFile()
 
+    // 把gatewayServer的端口和secret写入conn_info_file, python进程根据这个连接Py4JServer
     val dos = new DataOutputStream(new FileOutputStream(tmpPath))
     dos.writeInt(boundPort)
 
@@ -64,6 +71,7 @@ private[spark] object PythonGatewayServer extends Logging {
       System.exit(1)
     }
 
+    // 阻塞等到Python driver销毁
     // Exit on EOF or broken pipe to ensure that this process dies when the Python driver dies:
     while (System.in.read() != -1) {
       // Do nothing

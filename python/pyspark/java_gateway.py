@@ -61,10 +61,14 @@ def launch_gateway(conf=None, popen_kwargs=None):
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
+        # spark-submit的命令
         command = [os.path.join(SPARK_HOME, script)]
         if conf:
             for k, v in conf.getAll():
                 command += ['--conf', '%s=%s' % (k, v)]
+        # 默认会传入pyspark-shell参数, SparkSubmitArguments根据传入的参数(res.endsWith(".py") || res == PYSPARK_SHELL)设置isPython属性
+        # 对应spark driver端运行的主类是: org.apache.spark.api.python.PythonGatewayServer
+        # 直接运行python文件和再jupyter notebook中运行pyspark就是这种情况
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):
             submit_args = ' '.join([
@@ -95,6 +99,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 def preexec_func():
                     signal.signal(signal.SIGINT, signal.SIG_IGN)
                 popen_kwargs['preexec_fn'] = preexec_func
+                # 启动spark-submit字进程
                 proc = Popen(command, **popen_kwargs)
             else:
                 # preexec_fn not supported on Windows
@@ -107,6 +112,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
             if not os.path.isfile(conn_info_file):
                 raise Exception("Java gateway process exited before sending its port number")
 
+            # conn_info_file文件中有和java进程通信的信息
             with open(conn_info_file, "rb") as info:
                 gateway_port = read_int(info)
                 gateway_secret = UTF8Deserializer().loads(info)
@@ -140,6 +146,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 port=0,
                 eager_load=False))
     else:
+        # 创建gateway, py4j提供的类
         gateway = JavaGateway(
             gateway_parameters=GatewayParameters(
                 port=gateway_port,
@@ -149,6 +156,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
     # Store a reference to the Popen object for use by the caller (e.g., in reading stdout/stderr)
     gateway.proc = proc
 
+    # 就这样导入类?
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
     java_import(gateway.jvm, "org.apache.spark.api.java.*")

@@ -2620,6 +2620,7 @@ private[spark] object Utils extends Logging {
     initialExecutors
   }
 
+  // 创建处理并关闭资源的函数, 看人家写的多巧妙, 才两行代码就实现了
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
     val resource = createResource
     try f.apply(resource) finally resource.close()

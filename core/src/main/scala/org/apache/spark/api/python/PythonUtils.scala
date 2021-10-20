@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 
+// 里面大部分是把java集合转换为scala集合的函数
 private[spark] object PythonUtils {
   val PY4J_ZIP_NAME = "py4j-0.10.9-src.zip"
 

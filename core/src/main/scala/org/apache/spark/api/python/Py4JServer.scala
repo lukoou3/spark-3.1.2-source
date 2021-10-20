@@ -41,6 +41,7 @@ private[spark] class Py4JServer(sparkConf: SparkConf) extends Logging {
       .javaAddress(localhost)
       .build()
   } else {
+    // 我们的就是这个
     new py4j.GatewayServer.GatewayServerBuilder()
       .authToken(secret)
       .javaPort(0)

@@ -328,6 +328,7 @@ class SparkContext(object):
         """
         with SparkContext._lock:
             if not SparkContext._gateway:
+                # 初始化gateway, 实现和java进程通信的关键
                 SparkContext._gateway = gateway or launch_gateway(conf)
                 SparkContext._jvm = SparkContext._gateway.jvm
 
