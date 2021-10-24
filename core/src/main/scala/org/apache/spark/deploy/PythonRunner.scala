@@ -31,6 +31,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
+ * spark-submit方式 python的入口
  * A main class used to launch Python applications. It executes python as a
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */

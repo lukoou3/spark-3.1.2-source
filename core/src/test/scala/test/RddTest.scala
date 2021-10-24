@@ -22,6 +22,8 @@ object RddTest {
       .collect()
     println(rsts.toBuffer)
 
+    rdd.toJavaRDD().mapPartitions()
+
     sc.stop()
   }
 

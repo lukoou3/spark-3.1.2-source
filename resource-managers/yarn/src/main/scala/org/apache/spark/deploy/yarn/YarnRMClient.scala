@@ -124,6 +124,7 @@ private[spark] class YarnRMClient extends Logging {
 
   /** Returns the maximum number of attempts to register the AM. */
   def getMaxRegAttempts(sparkConf: SparkConf, yarnConf: YarnConfiguration): Int = {
+    // yarn cluster模式application重试次数, 没配置spark.yarn.maxAppAttempts就去yarn的配置yarn.resourcemanager.am.max-attempts
     val sparkMaxAttempts = sparkConf.get(MAX_APP_ATTEMPTS).map(_.toInt)
     val yarnMaxAttempts = yarnConf.getInt(
       YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)

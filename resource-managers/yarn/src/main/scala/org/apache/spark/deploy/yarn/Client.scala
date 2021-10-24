@@ -269,6 +269,7 @@ private[spark] class Client(
     sparkConf.get(APPLICATION_TAGS).foreach { tags =>
       appContext.setApplicationTags(new java.util.HashSet[String](tags.asJava))
     }
+    // yarn cluster模式application重试次数, 没配置spark.yarn.maxAppAttempts就去yarn的配置yarn.resourcemanager.am.max-attempts
     sparkConf.get(MAX_APP_ATTEMPTS) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
       case None => logDebug(s"${MAX_APP_ATTEMPTS.key} is not set. " +
