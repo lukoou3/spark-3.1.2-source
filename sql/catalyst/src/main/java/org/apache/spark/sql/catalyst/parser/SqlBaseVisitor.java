@@ -3,6 +3,7 @@ package org.apache.spark.sql.catalyst.parser;
 import org.antlr.v4.runtime.tree.ParseTreeVisitor;
 
 /**
+ * 根据SqlBase.g4文件生成的类
  * This interface defines a complete generic visitor for a parse tree produced
  * by {@link SqlBaseParser}.
  *
@@ -263,6 +264,7 @@ public interface SqlBaseVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitCreateView(SqlBaseParser.CreateViewContext ctx);
 	/**
+	 * 对应SqlBase.g4中的createTempViewUsing
 	 * Visit a parse tree produced by the {@code createTempViewUsing}
 	 * labeled alternative in {@link SqlBaseParser#statement}.
 	 * @param ctx the parse tree

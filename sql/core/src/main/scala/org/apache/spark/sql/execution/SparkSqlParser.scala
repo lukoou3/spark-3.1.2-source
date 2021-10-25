@@ -332,6 +332,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateTempViewUsing(
       ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    // case class CreateTempViewUsing extends RunnableCommand
+    // 匹配生成CreateTempViewUsing LogicalPlan, 这个extends RunnableCommand会直接调用它的run方法
     CreateTempViewUsing(
       tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
       userSpecifiedSchema = Option(ctx.colTypeList()).map(createSchema),
