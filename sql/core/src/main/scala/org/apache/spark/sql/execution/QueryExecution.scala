@@ -44,6 +44,8 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
 
 /**
+ * saprk sql的主要流程在这个类里
+ *
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
  *
@@ -68,6 +70,7 @@ class QueryExecution(
     }
   }
 
+  //analyzer阶段
   lazy val analyzed: LogicalPlan = executePhase(QueryPlanningTracker.ANALYSIS) {
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
@@ -81,6 +84,7 @@ class QueryExecution(
     sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
   }
 
+  //optimizer阶段, 优化器
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
@@ -94,6 +98,7 @@ class QueryExecution(
 
   private def assertOptimized(): Unit = optimizedPlan
 
+  //SparkPlan阶段, 转物理计划
   lazy val sparkPlan: SparkPlan = {
     // We need to materialize the optimizedPlan here because sparkPlan is also tracked under
     // the planning phase
@@ -105,6 +110,7 @@ class QueryExecution(
     }
   }
 
+  //转executedPlan阶段
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = {
@@ -118,6 +124,7 @@ class QueryExecution(
     }
   }
 
+  // execute阶段
   /**
    * Internal version of the RDD. Avoids copies and has no schema.
    * Note for callers: Spark may apply various optimization including reusing object: this means

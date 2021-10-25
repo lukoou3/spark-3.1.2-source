@@ -605,8 +605,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  /**
+   * Strategy是[[SparkStrategy]]的别名
+   * apply方法把逻辑计划转换成物理计划:LogicalPlan => SparkPlan
+   */
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // 匹配RunnableCommand和DataWritingCommand的Exec
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 

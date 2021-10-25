@@ -77,6 +77,7 @@ case class InsertIntoHiveTable(
     outputColumnNames: Seq[String]) extends SaveAsHiveFile {
 
   /**
+   * 插入hive的逻辑计划,
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.

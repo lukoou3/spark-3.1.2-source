@@ -83,6 +83,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
+    // 这里把basicWriteJobStatsTracker传入, 这样就可以更新metrics
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,

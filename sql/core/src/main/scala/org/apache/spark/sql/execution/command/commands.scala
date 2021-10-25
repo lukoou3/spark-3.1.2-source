@@ -47,6 +47,9 @@ trait RunnableCommand extends Command {
 }
 
 /**
+ *
+ * ExecutedCommandExec和DataWritingCommandExec差不多
+ * 运行RunnableCommand的物理计划, metrics信息就是取的RunnableCommand的metrics
  * A physical operator that executes the run method of a `RunnableCommand` and
  * saves the result to prevent multiple executions.
  *
@@ -67,6 +70,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    // 直接运行的的逻辑计划RunnableCommand的run方法,
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
@@ -92,6 +96,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 }
 
 /**
+ * 这个就是执行插入hive表的Exec, 看了web界面和SaveAsHiveFile的metrics, metrics信息在object BasicWriteJobStatsTracker中定义
+ * 运行DataWritingCommandExec的物理计划, metrics信息就是取的DataWritingCommandExec的metrics
  * A physical operator that executes the run method of a `DataWritingCommand` and
  * saves the result to prevent multiple executions.
  *
@@ -106,7 +112,6 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
     val rows = cmd.run(sqlContext.sparkSession, child)
-
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
 

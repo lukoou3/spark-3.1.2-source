@@ -606,6 +606,11 @@ class SparkSession private(
    * ----------------- */
 
   /**
+   * 运行sql查询, 返回DataFrame
+   *    对于select查询会直接返回DataFrame
+   *    对于DDL/DML commands会立即运行
+   *    Dataset的构造函数中初始化logicalPlan变量, sql生成的LogicalPlan匹配Command的话, 会转成物理计划直接执行
+   *    然后直接调用[[SparkPlan.executeCollect()]]触发
    * Executes a SQL query using Spark, returning the result as a `DataFrame`.
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
