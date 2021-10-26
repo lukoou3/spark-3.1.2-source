@@ -172,6 +172,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
   since = "2.0.0")
 case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
+  // nvl就是调的Coalesce
   def this(left: Expression, right: Expression) = {
     this(left, right, Coalesce(Seq(left, right)))
   }

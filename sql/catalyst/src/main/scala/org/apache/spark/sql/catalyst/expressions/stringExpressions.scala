@@ -1718,11 +1718,13 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def dataType: DataType = str.dataType
 
+  // 输入类型, 第一个参数为TypeCollection(StringType, BinaryType)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = str :: pos :: len :: Nil
 
+  // TernaryExpression中eval实现了null判断
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
     str.dataType match {
       case StringType => string.asInstanceOf[UTF8String]

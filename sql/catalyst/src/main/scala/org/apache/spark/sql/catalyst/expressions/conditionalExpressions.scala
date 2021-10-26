@@ -42,9 +42,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
+
+  // trueValue,falseValue任意一个nullable就是nullable的
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    // 检查输入类型, predicate输出类型必须是BooleanType, 输入类型必须相同
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
         "type of predicate expression in If should be boolean, " +
@@ -58,6 +61,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   }
 
   override def eval(input: InternalRow): Any = {
+    // eval方法中就是直接写代码计算的
     if (java.lang.Boolean.TRUE.equals(predicate.eval(input))) {
       trueValue.eval(input)
     } else {
@@ -70,6 +74,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
+    // 这代码是怎么生成的?
     val code =
       code"""
          |${condEval.code}

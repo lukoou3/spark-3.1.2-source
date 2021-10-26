@@ -36,6 +36,29 @@ import org.apache.spark.sql.types._
 /**
  * An expression in Catalyst.
  *
+ * 如果expression想在函数注册中暴露(使用户可以调用它通过"name(arguments...)"),
+ * 则必须是一个参数都是Expression的case class. 可以看[[Substring]]作为example.
+ *
+ * 主要的接口和抽象类:
+ * - [[Nondeterministic]]: 非确定性的expression, deterministic和foldable都标记为final false.
+ * - [[Stateful]]: 包含可变状态的expression.例如MonotonicallyIncreasingID和Rand。Stateful expression都是Nondeterministic.
+ * - [[Unevaluable]]: 非可执行的expression. eval方法中抛出异常。
+ * - [[CodegenFallback]]: 没有代码生成实现的expression.implemented and falls back to interpreted mode.
+ * - [[NullIntolerant]]: 不容忍null, 任何一个输入的null都会返回null
+ * - [[NonSQLExpression]]:
+ * - [[UserDefinedExpression]]: a common base trait for user-defined functions, including UDF/UDAF/UDTF.
+ * - [[HigherOrderFunction]]: 高阶函数, 可以接收(lambda) functions的expression
+ * - [[NamedExpression]]: An [[Expression]] that is named.
+ * - [[TimeZoneAwareExpression]]: 感知时区的expression, 时间日期函数基础trait
+ * - [[SubqueryExpression]]: 可以包含LogicalPlan的expression
+ *
+ * - [[LeafExpression]]: 叶子节点类型的表达式.如current_date
+ * - [[UnaryExpression]]: 一元类型表达式, 只有一个子节点.如abs
+ * - [[BinaryExpression]]: 二元类型表达式, 包含两个子节点.如date_add
+ * - [[TernaryExpression]]: 三元类型表达式, 包含三个子节点.如substr
+ * - [[QuaternaryExpression]]: 四元类型表达式, 包含四个子节点.如regexp_replace
+ * - [[BinaryOperator]]: BinaryExpression的特殊情况, 两个子节点输出类型相同.如 >, +
+ *
  * If an expression wants to be exposed in the function registry (so users can call it with
  * "name(arguments...)", the concrete implementation must be a case class whose constructor
  * arguments are all Expressions types. See [[Substring]] for an example.
@@ -72,6 +95,11 @@ import org.apache.spark.sql.types._
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
  *                       the same output data type.
  *
+ * 几个用于类型强制规则的重要接口：
+ * - [[ExpectsInputTypes]]: 具有预期输入类型的表达式。此特性通常由运算符表达式（例如，加法、减法）使用，以定义预期的输入类型，而无需任何隐式转换。
+ * - [[ImplicitCastInputTypes]]: 具有预期输入类型的表达式。可以使用隐式转换用[[TypeCoercion.ImplicitTypeCasts]].
+ * - [[ComplexTypeMergingExpression]]: 解析复杂表达式的输出类型（例如CaseWhen）。
+ *
  * A few important traits used for type coercion rules:
  * - [[ExpectsInputTypes]]: an expression that has the expected input types. This trait is typically
  *                          used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
@@ -84,8 +112,16 @@ import org.apache.spark.sql.types._
 abstract class Expression extends TreeNode[Expression] {
 
   /**
+   * 能否在查询执行之前静态计算.
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed. A typical use case: [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]]
+   *
+   * foldable为true的情况:
+   * - A [[Coalesce]] coalesce是foldable如果它的所有children都是foldable
+   * - A [[BinaryExpression]] 二元表达式, 如果子节点都是foldable
+   * - A [[Not]], [[IsNull]], or [[IsNotNull]] is foldable 如果子节点是foldable
+   * - A [[Literal]] is foldable, 字面量, 常量
+   * - A [[Cast]] or [[UnaryMinus]] is foldable 如果子节点是foldable
    *
    * The following conditions are used to determine suitability for constant folding:
    *  - A [[Coalesce]] is foldable if all of its children are foldable
@@ -123,10 +159,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   def references: AttributeSet = _references
 
+  // 计算表达式返回结果, 输入InternalRow
   /** Returns the result of evaluating this expression on a given input Row */
   def eval(input: InternalRow = null): Any
 
   /**
+   * 返回ExprCode, 包含java源代码, 计算表达式的结果。调用的doGenCode, 子类实现doGenCode
    * Returns an [[ExprCode]], that contains the Java source code to generate the result of
    * evaluating the expression on an input row.
    *
@@ -206,6 +244,7 @@ abstract class Expression extends TreeNode[Expression] {
   lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
   /**
+   * 返回DataType。非法的在unresolved expression上查询dataType
    * Returns the [[DataType]] of the result of evaluating this expression.  It is
    * invalid to query the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
@@ -486,6 +525,7 @@ abstract class UnaryExpression extends Expression {
     sys.error(s"UnaryExpressions must override either eval or nullSafeEval")
 
   /**
+   * 用于一元表达式生成code block, null值直接返回null, 非null调用f的逻辑
    * Called by unary expressions to generate a code block that returns null if its parent returns
    * null, and if not null, use `f` to generate the expression.
    *
@@ -1044,6 +1084,7 @@ abstract class SeptenaryExpression extends Expression {
 trait ComplexTypeMergingExpression extends Expression {
 
   /**
+   * 默认为所有子节点的数据类型。用于得出表达式的输出类型
    * A collection of data types used for resolution the output type of the expression. By default,
    * data types of all child expressions. The collection must not be empty.
    */
@@ -1065,6 +1106,7 @@ trait ComplexTypeMergingExpression extends Expression {
     inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
 
+  // 输出类型,
   override def dataType: DataType = internalDataType
 }
 

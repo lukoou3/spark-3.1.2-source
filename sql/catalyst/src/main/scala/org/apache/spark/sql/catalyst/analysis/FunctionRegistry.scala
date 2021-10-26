@@ -197,6 +197,7 @@ object FunctionRegistry {
 
   val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
+  // 内置函数
   // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions

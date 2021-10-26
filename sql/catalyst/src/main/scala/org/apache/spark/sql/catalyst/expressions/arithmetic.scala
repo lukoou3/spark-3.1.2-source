@@ -124,6 +124,10 @@ case class UnaryPositive(child: Expression)
 }
 
 /**
+ * 继承的接口:
+ *    一元表达式:一个参数
+ *    ExpectsInputTypes: 具有预期输入类型的表达式
+ *    NullIntolerant:
  * A function that get the absolute value of the numeric value.
  */
 @ExpressionDescription(
@@ -139,13 +143,17 @@ case class Abs(child: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
+  // dataType和child一样
   override def dataType: DataType = child.dataType
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
+    // java.math.BigDecimal
     case _: DecimalType =>
       defineCodeGen(ctx, ev, c => s"$c.abs()")
+    // 数值类型, 调用java.lang.Math.abs(变量名), 强转为输入(也是输出)的类型
+    // CodeGenerator.javaType(dt)返回spark sql DataType对应的java类型, 可以看到DateType,TimestampType底层是用int,long表示的
     case dt: NumericType =>
       defineCodeGen(ctx, ev, c => s"(${CodeGenerator.javaType(dt)})(java.lang.Math.abs($c))")
   }

@@ -240,7 +240,10 @@ case class DateAdd(startDate: Expression, days: Expression)
 
   override def dataType: DataType = DateType
 
+  // BinaryExpression中eval判断了null
   override def nullSafeEval(start: Any, d: Any): Any = {
+    // sql的DateType就是int; int,short包装类都是Number的子类
+    // 直接对int执行相加
     start.asInstanceOf[Int] + d.asInstanceOf[Number].intValue()
   }
 
