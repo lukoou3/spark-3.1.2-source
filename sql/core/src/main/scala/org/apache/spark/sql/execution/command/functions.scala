@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
 /**
+ * 在sql中创建函数
  * The DDL command that creates a function.
  * To create a temporary function, the syntax of using this command in SQL is:
  * {{{

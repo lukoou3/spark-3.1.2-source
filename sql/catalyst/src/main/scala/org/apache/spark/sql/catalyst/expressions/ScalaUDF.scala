@@ -1177,6 +1177,7 @@ case class ScalaUDF(
        """.stripMargin)
   }
 
+  // 最后还会把scala类型转换回spark sql类型
   private[this] val resultConverter = catalystConverter
 
   lazy val udfErrorMessage = {

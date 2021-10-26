@@ -418,6 +418,7 @@ case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
 
 /**
+ *  在sql中创建函数
  *  CREATE FUNCTION statement, as parsed from SQL
  */
 case class CreateFunctionStatement(

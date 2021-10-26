@@ -136,6 +136,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SharedState.resolveWarehousePath(sparkConf, conf)
     SessionState.start(sessionState)
 
+    // 结束时关闭sparkContext
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
@@ -201,6 +202,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     cli.printMasterAndAppId
 
+    /**
+     * 执行-e传入的sql后直接结束
+     * 调用的是[[org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.processLine()]]
+      */
     if (sessionState.execString != null) {
       System.exit(cli.processLine(sessionState.execString))
     }
@@ -274,6 +279,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     var line = reader.readLine(currentPrompt + "> ")
 
     while (line != null) {
+      //
       if (!line.startsWith("--")) {
         if (prefix.nonEmpty) {
           prefix += '\n'
@@ -322,6 +328,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
+    // 在这调用的SparkSQLEnv.init()
     SparkSQLEnv.init()
     if (sessionState.getIsSilent) {
       SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
@@ -488,6 +495,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     try {
       var lastRet: Int = 0
 
+      // 解析sql, 不能直接使用split(";"), 因为可能被引用
       // we can not use "split" function directly as ";" may be quoted
       val commands = splitSemiColon(line).asScala
       var command: String = ""
