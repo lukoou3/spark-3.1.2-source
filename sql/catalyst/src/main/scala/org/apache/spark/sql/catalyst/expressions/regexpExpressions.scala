@@ -628,6 +628,11 @@ object RegExpExtractBase {
   }
 }
 
+/**
+ * 正则表达式提取字符串的抽象基类, 就两个子类: RegExpExtract 和 RegExpExtractAll
+ * 这里就定义了获取Matcher的逻辑, 我们写函数时都可以借鉴这样的实现, 复用值标记为transient
+ * 其他情况我们可能把属性标记为transient lazy val, 这里pattern没用lazy标记是因为输入的正则可能不是字面量, 可以变化, 还有就是要根据参数生成pattern
+ */
 abstract class RegExpExtractBase
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
   def subject: Expression
@@ -643,6 +648,7 @@ abstract class RegExpExtractBase
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
 
   protected def getLastMatcher(s: Any, p: Any): Matcher = {
+    // 正常情况下我们输入的正则字符串都是字面量, 这个每个task的每个类只会执行一次初始化pattern
     if (p != lastRegex) {
       // regex value changed
       lastRegex = p.asInstanceOf[UTF8String].clone()
@@ -654,6 +660,8 @@ abstract class RegExpExtractBase
 
 /**
  * Extract a specific(idx) group identified by a Java regex.
+ * spark sql 默认是会转义我们输入的\的, spark.sql.parser.escapedStringLiterals默认为false
+ * 正则表达式需要写的和java中的字面量一样
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
@@ -693,6 +701,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     val m = getLastMatcher(s, p)
+    // 只要参数不为null, 匹配不到返回的是空字符串
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
@@ -711,6 +720,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def dataType: DataType = StringType
   override def prettyName: String = "regexp_extract"
 
+  // 这个生成java代码的实现太麻烦了, 我还是使用给用户提供的注册udf的实现吧
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName

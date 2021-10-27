@@ -382,7 +382,9 @@ object DateTimeUtils {
    * microseconds where microsecond 0 is 1970-01-01 00:00:00Z.
    */
   def instantToMicros(instant: Instant): Long = {
+    // 秒转微妙, * 10e6
     val us = Math.multiplyExact(instant.getEpochSecond, MICROS_PER_SECOND)
+    // 加上Instant中的纳秒字段, 转成微妙
     val result = Math.addExact(us, NANOSECONDS.toMicros(instant.getNano))
     result
   }
@@ -818,6 +820,8 @@ object DateTimeUtils {
   }
 
   /**
+   * 从UTC时区的历元开始以微秒的形式获取当前瞬间。
+   * spark sql中TimestampType类型存的是UTC time的微秒值
    * Obtains the current instant as microseconds since the epoch at the UTC time zone.
    */
   def currentTimestamp(): Long = instantToMicros(Instant.now())

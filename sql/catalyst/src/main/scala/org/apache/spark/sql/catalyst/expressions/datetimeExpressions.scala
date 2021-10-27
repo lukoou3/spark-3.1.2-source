@@ -125,6 +125,11 @@ case class CurrentDate(timeZoneId: Option[String] = None)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  /**
+   * DataType存的就是天数的增量, day 0 是 1970-01-01
+   * 可以看到currentDate传入了时区, current_timestamp则没传, 也好理解时间戳秒数等可以不区分时区增加时间, 日期的天数则不行
+   * 就是调用的LocalDate.now(zoneId), 然后取localDate.toEpochDay
+   */
   override def eval(input: InternalRow): Any = currentDate(zoneId)
 
   override def prettyName: String = "current_date"
@@ -785,7 +790,10 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  // 这些格式化显示日期的表达式都继承TimeZoneAwareExpression, 能够感知时区
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
+    // lazy formatterOption如果传入的fmt是字面量等固定不变的值, 会返回值, 否则None;
+    // 一般传入的就是固定的值, 每个task就公用一个formatter; 如果传入的是可变的fmt, 每次都调用getFormatter(format.toString)
     val formatter = formatterOption.getOrElse(getFormatter(format.toString))
     UTF8String.fromString(formatter.format(timestamp.asInstanceOf[Long]))
   }
