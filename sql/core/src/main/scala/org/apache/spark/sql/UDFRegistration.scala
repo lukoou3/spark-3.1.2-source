@@ -21,7 +21,6 @@ import java.lang.reflect.ParameterizedType
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
@@ -31,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
@@ -69,6 +68,27 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
+   * UserDefinedAggregateFunction 3.0之后被标记为废弃了, 推荐使用functions.udaf(agg)注册udaf
+   * 2.4.7官网上不安全的udaf还是这个UserDefinedAggregateFunction, 安全类型是org.apache.spark.sql.expressions.Aggregator
+   * 3.0之后dateset和dateframe推荐都通过Aggregator注册
+   *
+   * 知道为啥要启用UserDefinedAggregateFunction了:
+   *  UserDefinedAggregateFunction被包装成ScalaUDAF, ScalaUDAF对聚合缓冲区和聚合函数输入的参数都会进行序列化和反序列化转换
+   *  只参数转换性能还能接受, 关键是聚合变量每次也都转换, 这样效率可能很低, 比如map转换时 org.apache.spark.sql.catalyst.CatalystTypeConverters.MapConverter
+   *  sql中使用key数组和value数组存map, 每次转换都要新建map, 性能很低:convertedKeys.zip(convertedValues).toMap
+   *  你就算在代码中使用可变类型的map, 他每次都会反序列化成不可变的map。convertedKeys.zip(convertedValues).toMap
+   *
+   * 在看看使用Aggregator的方式[[functions.udaf(agg)]]:
+   *  把Aggregator加入inputEncoder信息生成[[UserDefinedAggregator]]
+   *  register UserDefinedAggregator时调用udaf.scalaAggregator生成[[ScalaAggregator]]
+   *  ScalaAggregator继承自TypedImperativeAggregate[BUF],
+   *  update时只会转换参数, 内建的collect_list和collect_set继承自Collect[mutable.ArrayBuffer[Any]]继承自TypedImperativeAggregate
+   *  聚合缓冲区也会序列化和反序列化, 主要是在读取shuffle合并分区数据时, TypedImperativeAggregate的工作流程可以去看他的注释, 写的很详细
+   *  TypedImperativeAggregate可以使用任意的java对象作为内部缓冲区,看TypedImperativeAggregate的注释可以在窗口函数中使用TypedImperativeAggregate函数
+   *  带有TypeDimOperativeAggregate函数的SQL计划用于基于排序的聚合，而不是基于哈希的聚合，因为TypeDimOperativeAggregate使用BinaryType作为聚合缓冲区的存储格式，而基于哈希的聚合不支持这种格式。
+   *  基于散列的聚合只支持可变类型的聚合缓冲区（如LongType、IntType，它们具有固定的长度，并且可以在UnsafeRow中进行适当的变异）。
+   *
+   *
    * Registers a user-defined aggregate function (UDAF).
    *
    * @param name the name of the UDAF.
@@ -88,6 +108,8 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   }
 
   /**
+   * udf和udaf都可以注册
+   *
    * Registers a user-defined function (UDF), for a UDF that's already defined using the Dataset
    * API (i.e. of type UserDefinedFunction). To change a UDF to nondeterministic, call the API
    * `UserDefinedFunction.asNondeterministic()`. To change a UDF to nonNullable, call the API
