@@ -289,10 +289,13 @@ object DecimalLiteral {
 }
 
 /**
+ * 字面量类型, 叶子节点, eval方法直接返回value
+ * 要做类型检查, 使用Literal.create()代替使用构造器
  * In order to do type checking, use Literal.create() instead of constructor
  */
 case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
+  //类型检查
   Literal.validateLiteralValue(value, dataType)
 
   override def foldable: Boolean = true
@@ -344,6 +347,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // 返回spark sql DataType对应的java类型字符串, DateType,TimestampType底层是用int,long表示的
     val javaType = CodeGenerator.javaType(dataType)
     if (value == null) {
       ExprCode.forNullValue(dataType)

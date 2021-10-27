@@ -23,13 +23,19 @@ import org.apache.spark.sql.types.IntegerType
 
 class CodeBlockSuite extends SparkFunSuite {
 
+  // block插值字符串和表达值输入
   test("Block interpolates string and ExprValue inputs") {
+    // 创建一个isNull的局部变量, name为expr1_isNull
     val isNull = JavaCode.isNullVariable("expr1_isNull")
+    // 字符串字面量
     val stringLiteral = "false"
+    // code插值
     val code = code"boolean $isNull = $stringLiteral;"
+    // 生成的代码
     assert(code.toString == "boolean expr1_isNull = false;")
   }
 
+  // 直接的字面量被折叠成字符串代码部分，而不是块输入
   test("Literals are folded into string code parts instead of block inputs") {
     val value = JavaCode.variable("expr1", IntegerType)
     val intLiteral = 1
@@ -37,6 +43,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(code.asInstanceOf[CodeBlock].blockInputs === Seq(value))
   }
 
+  // 应将代码部分视为转义，但不应将字符串输入视为转义
   test("Code parts should be treated for escapes, but string inputs shouldn't be") {
     val strlit = raw"\\"
     val code = code"""String s = "foo\\bar" + "$strlit";"""
@@ -49,6 +56,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(code.asInstanceOf[CodeBlock].toString == expected)
   }
 
+  // 测试Block.stripMargin
   test("Block.stripMargin") {
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val value = JavaCode.variable("expr1", IntegerType)
@@ -69,6 +77,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(code2.toString == expected)
   }
 
+  // Block可以捕获输入expr values
   test("Block can capture input expr values") {
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val value = JavaCode.variable("expr1", IntegerType)
@@ -84,6 +93,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(exprValues === Set(value, isNull))
   }
 
+  // 合并blocks
   test("concatenate blocks") {
     val isNull1 = JavaCode.isNullVariable("expr1_isNull")
     val value1 = JavaCode.variable("expr1", IntegerType)
@@ -112,9 +122,14 @@ class CodeBlockSuite extends SparkFunSuite {
       case e: ExprValue => e
     }).toSet
     assert(exprValues.size == 5)
+    //  LiteralValue也在blockInputs中, 直接在code中的插入的字面量非Litera类, 才会被处理成code字符串
+    // 看了code的实现, 发现只有ExprValue和CodeBlock会放到输入里, Inline和其他的java基本类型(包含str)会放入code
+    // code中不允许插入其他的类型, 会直接抛出异常
     assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
   }
 
+  // 在代码块中插入未接受的对象时抛出异常, 接受JavaCode的子类和java基本类型(包含str)
+  // ExprValue和CodeBlock会放到输入里, Inline和其他的java基本类型(包含str)会放入code
   test("Throws exception when interpolating unexcepted object in code block") {
     val obj = Tuple2(1, 1)
     val e = intercept[IllegalArgumentException] {
@@ -123,7 +138,9 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(e.getMessage().contains(s"Can not interpolate ${obj.getClass.getName}"))
   }
 
+  // 转换block中的expr
   test("transform expr in code block") {
+    // SimpleExprValue
     val expr = JavaCode.expression("1 + 1", IntegerType)
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val exprInFunc = JavaCode.variable("expr1", IntegerType)

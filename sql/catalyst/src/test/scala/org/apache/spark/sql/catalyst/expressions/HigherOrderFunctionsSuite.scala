@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+// 高阶函数表达式测试
 class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 

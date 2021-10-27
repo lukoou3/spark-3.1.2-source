@@ -22,6 +22,9 @@ import org.apache.spark.sql.types.BooleanType
 
 class ExprValueSuite extends SparkFunSuite {
 
+  /**
+   * true和false字面量测试, 都是字面量类型LiteralValue, 都是原生类型
+   */
   test("TrueLiteral and FalseLiteral should be LiteralValue") {
     val trueLit = TrueLiteral
     val falseLit = FalseLiteral

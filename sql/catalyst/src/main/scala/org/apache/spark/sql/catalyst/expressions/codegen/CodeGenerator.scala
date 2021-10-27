@@ -47,6 +47,11 @@ import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{LongAccumulator, ParentClassLoader, Utils}
 
 /**
+ * ExprCode表示一段Java代码，使用InternalRow作为输入，计算一个Expression。
+ *    code表示计算表达式的Java代码块。它应该是空字符串, 如果isNull和value已经存在，或者不需要代码来计算它们（字面量）。
+ *    value表示表达式计算代码块返回的结果（如果isNull为true，那么value是无效的）。
+ * ExprCode本质内容是JavaCode中的字符串，只是它增加了isNull和Value（ExprValue类型，可能是变量、常量或者表达式），用于表示是否为空和返回值信息。
+ *
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
