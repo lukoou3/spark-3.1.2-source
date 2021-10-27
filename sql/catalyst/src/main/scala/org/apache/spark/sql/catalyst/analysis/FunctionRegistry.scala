@@ -474,7 +474,7 @@ object FunctionRegistry {
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
-    expression[MapFilter]("map_filter"),
+    expression[MapFilter]("map_filter"),// map 是用keyArray和valueArray表示的, 过滤和取值的性能不高
     expression[ArrayFilter]("filter"),
     expression[ArrayExists]("exists"),
     expression[ArrayForAll]("forall"),

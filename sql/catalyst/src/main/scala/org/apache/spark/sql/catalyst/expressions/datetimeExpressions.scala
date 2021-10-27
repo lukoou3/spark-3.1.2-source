@@ -284,6 +284,7 @@ case class DateSub(startDate: Expression, days: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(start: Any, d: Any): Any = {
+    // 直接减去传入的days
     start.asInstanceOf[Int] - d.asInstanceOf[Number].intValue()
   }
 
@@ -708,6 +709,13 @@ case class Month(child: Expression) extends GetDateField {
   """,
   since = "1.5.0")
 case class DayOfMonth(child: Expression) extends GetDateField {
+  /**
+   * trait GetDateField extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant
+   * GetDateField调用DateTimeUtils的方法, 需要实现的抽象方法val func: Int => Any, 函数的返回值是协变的
+   * funcName就是DateTimeUtils的对应方法的名字, 用于生成代码.
+   *
+   * DayOfMonth, DayOfYear, DayOfWeek, Quarter等都是继承自GetDateField调用的DateTimeUtils的方法
+   */
   override val func = DateTimeUtils.getDayOfMonth
   override val funcName = "getDayOfMonth"
 }
@@ -1103,6 +1111,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(seconds: Any, format: Any): Any = {
+    // 这个竟然和date_format类似, 返回的是字符串, 直接把单位转成微秒调用fmt的方法
     val fmt = formatterOption.getOrElse(getFormatter(format.toString))
     UTF8String.fromString(fmt.format(seconds.asInstanceOf[Long] * MICROS_PER_SECOND))
   }
@@ -1153,6 +1162,12 @@ case class LastDay(startDate: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(date: Any): Any = {
+    /**
+     * 就是调用的LocalDate的方法
+     * val localDate = daysToLocalDate(days)
+     *  (days - localDate.getDayOfMonth) + localDate.lengthOfMonth()
+     *  def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
+     */
     DateTimeUtils.getLastDayOfMonth(date.asInstanceOf[Int])
   }
 
@@ -1194,6 +1209,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
   override def nullable: Boolean = true
 
   override def nullSafeEval(start: Any, dayOfW: Any): Any = {
+    // case "MO" | "MON" | "MONDAY" => MONDAY
     val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
     if (dow == -1) {
       null
@@ -1873,6 +1889,7 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
   override def dataType: DataType = IntegerType
 
+  // saprk sql中DateDiff实现简单, int值直接相减就行
   override def nullSafeEval(end: Any, start: Any): Any = {
     end.asInstanceOf[Int] - start.asInstanceOf[Int]
   }
