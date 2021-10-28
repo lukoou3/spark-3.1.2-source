@@ -1539,6 +1539,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
+  // CurrentDate和CurrentTimestamp也是需要解析的?
   override def visitCurrentDatetime(ctx: CurrentDatetimeContext): Expression = withOrigin(ctx) {
     if (conf.ansiEnabled) {
       ctx.name.getType match {
@@ -1646,6 +1647,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * 没在.g4文件定义的函数应该都是这个入口, udf就是这个入口
+   * 对应的处理规则在[[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveFunctions]]
+   * 通过lookupFunction函数能找到我们注册的函数
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
