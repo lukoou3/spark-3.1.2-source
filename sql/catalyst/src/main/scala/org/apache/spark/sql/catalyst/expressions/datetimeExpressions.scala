@@ -129,6 +129,11 @@ case class CurrentDate(timeZoneId: Option[String] = None)
    * DataType存的就是天数的增量, day 0 是 1970-01-01
    * 可以看到currentDate传入了时区, current_timestamp则没传, 也好理解时间戳秒数等可以不区分时区增加时间, 日期的天数则不行
    * 就是调用的LocalDate.now(zoneId), 然后取localDate.toEpochDay
+   *
+   * val dt = CurrentDate().eval(EmptyRow).asInstanceOf[Int]，会报错, 但是再sql中不会
+   * org.apache.spark.sql.catalyst.analysis.ResolveTimeZone extends Rule[LogicalPlan] 中会匹配TimeZoneAwareExpression调用withTimeZone(conf.sessionLocalTimeZone)
+   * 通过spark.sql.session.timeZone配置默认为TimeZone.getDefault.getID
+   * 我们默认是Asia/Shanghai
    */
   override def eval(input: InternalRow): Any = currentDate(zoneId)
 

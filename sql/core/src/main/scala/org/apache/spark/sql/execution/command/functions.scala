@@ -29,7 +29,10 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
 /**
- * 在sql中创建函数
+ * 在sql中创建函数, 主要用于注册hive函数
+ * spark函数现在似乎还是只能在代码中注册udaf, sql中只能注册废弃的org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+ * [[org.apache.spark.sql.catalyst.catalog.SessionCatalog.makeFunctionExpression()]]
+ *
  * The DDL command that creates a function.
  * To create a temporary function, the syntax of using this command in SQL is:
  * {{{
