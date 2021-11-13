@@ -233,8 +233,12 @@ private class KafkaRDDIterator[K, V](
   cacheLoadFactor: Float
 ) extends Iterator[ConsumerRecord[K, V]] {
 
+  // task结束后回收consumer
   context.addTaskCompletionListener[Unit](_ => closeIfNeeded())
 
+  // 注意：此方法保证返回的使用者当前未被任何其他人使用。
+  // 在此保证范围内，此方法将尽最大努力通过缓存使用者并在使用者使用时进行跟踪来重用使用者。
+  // KafkaRDDIterator在KafkaRDD compute分区时new, 所以rdd的每个分区消费consumer, consumer只会被单个task同时使用
   val consumer = {
     KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
     KafkaDataConsumer.acquire[K, V](part.topicPartition(), kafkaParams, context, useConsumerCache)

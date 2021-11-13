@@ -227,6 +227,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     override def release(): Unit = internalConsumer.close()
   }
 
+  // 缓存KafkaConsumer, key是groupId + topicPartition, 也就是每个分区每个线程是单独的KafkaConsumer
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
   private[kafka010] var cache: ju.Map[CacheKey, InternalKafkaConsumer[_, _]] = null
 

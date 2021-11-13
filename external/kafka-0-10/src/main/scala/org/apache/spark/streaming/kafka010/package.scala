@@ -24,6 +24,7 @@ import org.apache.spark.internal.config.ConfigBuilder
  */
 package object kafka010 { //scalastyle:ignore
 
+  // consumer缓存, KafkaRDD的参数
   private[spark] val CONSUMER_CACHE_ENABLED =
     ConfigBuilder("spark.streaming.kafka.consumer.cache.enabled")
       .version("2.2.1")
