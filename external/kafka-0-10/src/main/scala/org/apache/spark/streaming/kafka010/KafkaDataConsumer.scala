@@ -227,7 +227,20 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     override def release(): Unit = internalConsumer.close()
   }
 
-  // 缓存KafkaConsumer, key是groupId + topicPartition, 也就是每个分区每个线程是单独的KafkaConsumer
+  /**
+   * 缓存KafkaConsumer, key是groupId + topicPartition, 也就是每个分区每个线程是单独的KafkaConsumer
+   * kafka也不允许单个分区同时被多个线程消费, 所以我们也不能在使用ds api时不能同时运行同个topic同个group id的多个rdd
+   * 可以看到大部分方法都加了synchronized关键字
+   *
+   * 如果你的 spark batch interval 时间要大于 Kafka heartbeat session timeout(默认是30s)，If your Spark batch duration is larger than the default Kafka heartbeat session timeout (30 seconds),
+   * 需要自行增加 heartbeat.interval.ms 和 session.timeout.ms.
+   * 因为 Spark是 每隔一个 batch interval才去拉取数据， 如果间隔太久， kafka就会认为已经断开连接。
+   * 对于 batch interval 大于5分钟的， 还需要配置另一个参数:group.max.session.timeout.ms.
+   * https://blog.csdn.net/YiRan_Zhao/article/details/80448965
+   * https://www.cnblogs.com/zyzdisciple/p/11578462.html
+   * http://spark.apache.org/docs/latest/streaming-kafka-0-10-integration.html
+   * https://www.jianshu.com/p/ad583b0c7901
+   */
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
   private[kafka010] var cache: ju.Map[CacheKey, InternalKafkaConsumer[_, _]] = null
 
@@ -241,6 +254,8 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       loadFactor: Float): Unit = synchronized {
     if (null == cache) {
       logInfo(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
+      // 就简单地使用LinkedHashMap实现cache, 不想依赖guava, 不想 a cleanup thread
+      // 重写了LinkedHashMap的removeEldestEntry方法
       cache = new ju.LinkedHashMap[CacheKey, InternalKafkaConsumer[_, _]](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
