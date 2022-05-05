@@ -190,9 +190,12 @@ public class TransportClient implements Closeable {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
 
+    // 请求id，用于回调函数, uuid转的这个long是唯一的吗?
     long requestId = requestId();
+    // 用于触发回调函数
     handler.addRpcRequest(requestId, callback);
 
+    // 发生异常时从handler中移除requestId，并调用callback的失败回调
     RpcChannelListener listener = new RpcChannelListener(requestId, callback);
     channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message)))
       .addListener(listener);
@@ -220,6 +223,7 @@ public class TransportClient implements Closeable {
     }
 
     long requestId = requestId();
+    // 返回的回调是在[[TransportResponseHandler.handle]]中调用的
     handler.addRpcRequest(requestId, callback);
 
     RpcChannelListener listener = new RpcChannelListener(requestId, callback);

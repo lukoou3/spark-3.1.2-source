@@ -216,9 +216,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
   }
 
+  // 这里就重写了writeObject, 没修改readObject, 就是为了在序列化时增加校验
   /** Used by the JVM when serializing this object. */
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    // 校验
     assertValid()
+    // 应该就是默认的序列化实现
+    // Write the non-static and non-transient fields of the current class to this stream.
     out.defaultWriteObject()
   }
 

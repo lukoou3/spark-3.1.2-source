@@ -80,6 +80,7 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
   }
 
   /**
+   * 处理收信箱中的消息，其实就是处理服务端收到的消息
    * Process stored messages.
    */
   def process(dispatcher: Dispatcher): Unit = {
@@ -97,10 +98,16 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
     }
     while (true) {
       safelyCall(endpoint) {
+        /**
+         * RpcEndpoint的receiveAndReply和receive返回的都是偏函数
+         * 不同的是receiveAndReply参数中传入了context，可以实现返回的功能
+         */
         message match {
           case RpcMessage(_sender, content, context) =>
             try {
+              // 收到RpcMessage，调用endpoint的receiveAndReply，receiveAndReply是一个偏函数，不匹配就抛出SparkException
               endpoint.receiveAndReply(context).applyOrElse[Any, Unit](content, { msg =>
+                // 偏函数applyOrElse方法的default参数，不匹配时调用
                 throw new SparkException(s"Unsupported message $message from ${_sender}")
               })
             } catch {
@@ -112,7 +119,9 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
             }
 
           case OneWayMessage(_sender, content) =>
+            // 收到OneWayMessage，调用endpoint的receive
             endpoint.receive.applyOrElse[Any, Unit](content, { msg =>
+              // 偏函数applyOrElse方法的default参数，不匹配时调用
               throw new SparkException(s"Unsupported message $message from ${_sender}")
             })
 
@@ -197,6 +206,7 @@ private[netty] class Inbox(val endpointName: String, val endpoint: RpcEndpoint)
   }
 
   /**
+   * 调用action闭包，并在异常情况下调用端点endpoint的onError函数。
    * Calls action closure, and calls the endpoint's onError function in the case of exceptions.
    */
   private def safelyCall(endpoint: RpcEndpoint)(action: => Unit): Unit = {

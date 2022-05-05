@@ -93,6 +93,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     }
   }
 
+  // shuffle read 会调用这个方法
   @Override
   public InputStream createInputStream() throws IOException {
     FileInputStream is = null;
@@ -132,6 +133,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     if (conf.lazyFileDescriptor()) {
       return new DefaultFileRegion(file, offset, length);
     } else {
+      // 文件传输
       FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
       return new DefaultFileRegion(fileChannel, offset, length);
     }

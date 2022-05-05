@@ -260,6 +260,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
    * @return Whether the interceptor is still active after processing the data.
    */
   private boolean feedInterceptor(ByteBuf buf) throws Exception {
+    // interceptor.handle返回true代表还需数据要读取，数据读完时把interceptor置空
     if (interceptor != null && !interceptor.handle(buf)) {
       interceptor = null;
     }

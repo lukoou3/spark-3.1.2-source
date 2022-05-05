@@ -23,12 +23,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
+ * 创建心跳线程，该线程将每隔一段时间调用指定的reportHeartbeat函数。
  * Creates a heartbeat thread which will call the specified reportHeartbeat function at
  * intervals of intervalMs.
  *
- * @param reportHeartbeat the heartbeat reporting function to call.
- * @param name the thread name for the heartbeater.
- * @param intervalMs the interval between heartbeats.
+ * @param reportHeartbeat the heartbeat reporting function to call. 定时执行的函数
+ * @param name the thread name for the heartbeater. 心跳线程的名字
+ * @param intervalMs the interval between heartbeats. 定时间隔
  */
 private[spark] class Heartbeater(
     reportHeartbeat: () => Unit,
@@ -39,12 +40,16 @@ private[spark] class Heartbeater(
 
   /** Schedules a task to report a heartbeat. */
   def start(): Unit = {
+    // 等待一段随机间隔，这样心跳就不会同步
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
 
     val heartbeatTask = new Runnable() {
+      // logUncaughtExceptions：包装函数，有时长时打印日志但不会抓住拦截异常，会正常向上抛出，主要用于线程中执行的任务
       override def run(): Unit = Utils.logUncaughtExceptions(reportHeartbeat())
     }
+    // scheduleAtFixedRate：固定速率调度，本身任务执行时长不影响
+    // scheduleWithFixedDelay：固定延时调度，是在每个任务结束后延时一定时长执行任务
     heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 

@@ -61,6 +61,7 @@ private[netty] class RemoteNettyRpcCallContext(
   extends NettyRpcCallContext(senderAddress) {
 
   override protected def send(message: Any): Unit = {
+    // 返回数据的序列化在这里
     val reply = nettyEnv.serialize(message)
     callback.onSuccess(reply)
   }

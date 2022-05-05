@@ -111,7 +111,7 @@ public class StreamSuite {
   public void testZeroLengthStream() throws Throwable {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     try {
-      StreamTask task = new StreamTask(client, "emptyBuffer", TimeUnit.SECONDS.toMillis(5));
+      StreamTask task = new StreamTask(client, "emptyBuffer", TimeUnit.SECONDS.toMillis(50));
       task.run();
       task.check();
     } finally {
@@ -119,12 +119,54 @@ public class StreamSuite {
     }
   }
 
+  /**
+   * 实现文件传输
+   * @throws Throwable
+   */
   @Test
   public void testSingleStream() throws Throwable {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     try {
       StreamTask task = new StreamTask(client, "largeBuffer", TimeUnit.SECONDS.toMillis(5));
       task.run();
+      task.check();
+    } finally {
+      client.close();
+    }
+  }
+
+  /**
+   * 这个是文件下载的场景：实现文件的传输，我这方面的知识比较匮乏，暂时不知道怎么实现的，这个就要用在shuffle中
+   * [[org.apache.spark.network.server.TransportRequestHandler#processStreamRequest]]
+   * [[org.apache.spark.network.client.TransportResponseHandler#handle]]处理StreamResponse的请求
+   * 返回的message的body是FileSegmentManagedBuffer，convertToNetty方法中返回DefaultFileRegion
+   * MessageEncoder返回的MessageWithHeader，body传的就是DefaultFileRegion。MessageEncoder实现了FileRegion，似乎可以实现零拷贝，代码比较高深，看不太懂
+   *
+   * 通过打断点似乎看明白了文件下载的功能：
+   *    当服务端返回StreamResponse时，客户端经过TransportFrameDecoder处理后客户端第一次只会处理读取streamId, byteCount而不会读取body(文件内容)
+   *    处理StreamResponse时会设置TransportFrameDecoder的interceptor
+   *    第二次到TransportFrameDecoder时会直接不停的调用interceptor处理文件的内容，代码在channelRead方法中
+   *    interceptor读取完文件会把interceptor置为null,TransportFrameDecoder下次会decodeNext解析Frame
+   *
+   *    这里TransportFrameDecoder是怎么实现返回的第一个StreamResponse不包含body呢？StreamResponse的isBodyInFrame是false，服务端编码时并不会输出body
+   *    encode时isBodyInFrame = false，body实际是有的，frameLength的长度也不包含body的长度，
+   *    所以客户端第一次能解析出frame并设置interceptor，之后循环处理。
+   *    当interceptor读取到的字节达到期望的值时就会停止同时把interceptor置空。之后解析下一个Frame
+   *    spark的代码是真nb
+   *
+   * 文件上传的功能在哪？看org.apache.spark.network.protocol.Message.Type#decode(io.netty.buffer.ByteBuf)
+   * 看到有个UploadStream类型，为啥下载有StreamRequest和StreamResponse，上传就UploadStream？
+   * 下载是客户端先请求服务端，服务端返回文件数据
+   * 上传直接就是客户端请求服务端
+   */
+  @Test
+  public void testFileStream() throws Throwable {
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    try {
+      StreamTask task = new StreamTask(client, "file", TimeUnit.SECONDS.toMillis(50));
+      System.out.println(testData.testFile);
+      task.run();
+      System.out.println(testData.testFile);
       task.check();
     } finally {
       client.close();
@@ -205,6 +247,7 @@ public class StreamSuite {
             break;
           case "file":
             outFile = File.createTempFile("data", ".tmp", testData.tempDir);
+            System.out.println(outFile);
             out = new FileOutputStream(outFile);
             break;
           case "emptyBuffer":

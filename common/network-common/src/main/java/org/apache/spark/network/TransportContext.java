@@ -171,6 +171,9 @@ public class TransportContext implements Closeable {
   }
 
   /**
+   * 初始化 client/server Channel Pipeline，encodes/decodes messages，编码/解码 消息
+   * 使用TransportChannelHandler处理 request/response messages
+   *
    * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
    * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
    * response messages.
@@ -216,6 +219,7 @@ public class TransportContext implements Closeable {
    * properties (such as the remoteAddress()) may not be available yet.
    */
   private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
+    // 处理response消息的Handler，主要就是回调
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
     boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
@@ -225,6 +229,7 @@ public class TransportContext implements Closeable {
         client, rpcHandler.getStreamManager(),
         conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
     }
+    // 处理request消息的Handler，通过rpcHandler实现
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler,

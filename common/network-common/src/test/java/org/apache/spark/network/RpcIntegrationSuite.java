@@ -215,13 +215,19 @@ public class RpcIntegrationSuite {
       int idx = stream.lastIndexOf('/');
       ManagedBuffer meta = new NioManagedBuffer(JavaUtils.stringToBytes(stream));
       String streamName = (idx == -1) ? stream : stream.substring(idx + 1);
+      if(stream.equals("file")){
+        System.out.println(testData.testFile);
+      }
       ManagedBuffer data = testData.openStream(conf, streamName);
       client.uploadStream(meta, data, new RpcStreamCallback(stream, res, sem));
     }
 
-    if (!sem.tryAcquire(streams.length, 5, TimeUnit.SECONDS)) {
+    if (!sem.tryAcquire(streams.length, 500, TimeUnit.SECONDS)) {
       fail("Timeout getting response from the server");
     }
+
+    System.out.println("完成!");
+
     streamCallbacks.values().forEach(streamCallback -> {
       try {
         streamCallback.verify();
@@ -318,6 +324,20 @@ public class RpcIntegrationSuite {
     } finally {
       client.close();
     }
+  }
+
+  /**
+   * 这个是文件上传的场景：实现文件的传输
+   * 可以看到UploadStream的isBodyInFrame是false，但是body实际是有的，这个实现和下载类似：第一次解析出UploadStream的Frame设置interceptor，之后收到的文件body都通过interceptor处理
+   *
+   *
+   */
+  @Test
+  public void sendFileUploadStream() throws Exception {
+    String stream = "file";
+    RpcResult res = sendRpcWithStream(stream);
+    assertTrue("there were error messages!" + res.errorMessages, res.errorMessages.isEmpty());
+    assertEquals(Sets.newHashSet(stream), res.successMessages);
   }
 
   @Test
@@ -433,6 +453,7 @@ public class RpcIntegrationSuite {
     VerifyingStreamCallback(String streamId) throws IOException {
       if (streamId.equals("file")) {
         outFile = File.createTempFile("data", ".tmp", testData.tempDir);
+        System.out.println(outFile);
         out = new FileOutputStream(outFile);
       } else {
         out = new ByteArrayOutputStream();

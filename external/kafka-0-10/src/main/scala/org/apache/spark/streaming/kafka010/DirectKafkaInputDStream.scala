@@ -258,6 +258,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   override def start(): Unit = {
     val c = consumer
     paranoidPoll(c)
+    // 刚开始获取起始的offsets
     if (currentOffsets.isEmpty) {
       currentOffsets = c.assignment().asScala.map { tp =>
         tp -> c.position(tp)

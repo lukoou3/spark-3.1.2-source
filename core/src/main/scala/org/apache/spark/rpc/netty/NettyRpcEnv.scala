@@ -100,6 +100,7 @@ private[netty] class NettyRpcEnv(
   private val stopped = new AtomicBoolean(false)
 
   /**
+   * 每个地址的发信箱map，发消息时仅仅把消息放到Outbox中以实现非阻塞的send方法
    * A map for [[RpcAddress]] and [[Outbox]]. When we are connecting to a remote [[RpcAddress]],
    * we just put messages to its [[Outbox]] to implement a non-blocking `send` method.
    */
@@ -155,6 +156,11 @@ private[netty] class NettyRpcEnv(
     dispatcher.stop(endpointRef)
   }
 
+  /**
+   * 把消息放到Outbox，实现发消息
+   * @param receiver
+   * @param message
+   */
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
     if (receiver.client != null) {
       message.sendWith(receiver.client)
@@ -162,6 +168,7 @@ private[netty] class NettyRpcEnv(
       require(receiver.address != null,
         "Cannot send message to client endpoint with no listen address.")
       val targetOutbox = {
+        // 看看缓存中是否有这个地址的发信箱
         val outbox = outboxes.get(receiver.address)
         if (outbox == null) {
           val newOutbox = new Outbox(this, receiver.address)
@@ -180,11 +187,17 @@ private[netty] class NettyRpcEnv(
         outboxes.remove(receiver.address)
         targetOutbox.stop()
       } else {
+        // 向Outbox发消息
         targetOutbox.send(message)
       }
     }
   }
 
+  /**
+   * 只发消息：分为本地和远程
+   *
+   * @param message
+   */
   private[netty] def send(message: RequestMessage): Unit = {
     val remoteAddr = message.receiver.address
     if (remoteAddr == address) {
@@ -196,6 +209,7 @@ private[netty] class NettyRpcEnv(
       }
     } else {
       // Message to a remote RPC endpoint.
+      // 把OneWayOutboxMessage放到Outbox中
       postToOutbox(message.receiver, OneWayOutboxMessage(message.serialize(this)))
     }
   }
@@ -241,6 +255,10 @@ private[netty] class NettyRpcEnv(
         }(ThreadUtils.sameThread)
         dispatcher.postLocalMessage(message, p)
       } else {
+        /**
+         * 这里传入的onFailure和onSuccess回调的调用实现promise的success和failure，这里的promise是scala的promise
+         *
+         */
         val rpcMessage = RpcOutboxMessage(message.serialize(this),
           onFailure,
           (client, response) => onSuccess(deserialize[Any](client, response)))
@@ -484,6 +502,7 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
+    //在多线程中使用JavaSerializerInstance是安全的。然而，如果我们计划在将来支持KryoSerializer，我们必须使用ThreadLocal来存储SerializerInstance
     // Use JavaSerializerInstance in multiple threads is safe. However, if we plan to support
     // KryoSerializer in future, we have to use ThreadLocal to store SerializerInstance
     val javaSerializerInstance =
@@ -555,10 +574,38 @@ private[netty] class NettyRpcEndpointRef(
     nettyEnv.askAbortable(new RequestMessage(nettyEnv.address, this, message), timeout)
   }
 
+  // 发消息，返回Future
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     askAbortable(message, timeout).future
   }
 
+  /**
+   * 只发消息，对方不需要返回
+   * 不论是是send和ask都是调用的nettyEnv的send和ask/askAbortable
+   * 我们这个对象是RpcEndpointRef
+   * 发送消息的顺序：
+   *    RpcEndpointRef => nettyEnv => Outbox => TransportClient
+   *    RpcEndpointRef.send(message: Any) => nettyEnv.send(message: RequestMessage) => postToOutbox(message: OutboxMessage) => Outbox.send(message)
+   *         postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage):  OutboxMessage的类型：OneWayOutboxMessage/RpcOutboxMessage
+   *         Outbox.send(message): client.send(content) 和 requestId = client.sendRpc(content, this)
+   *
+   * 可以看到发送的消息都是RequestMessage，发送消息时似乎没经过dispatcher
+   * OneWayOutboxMessage就是直接发送消息，RpcOutboxMessage中会额外携带回调函数实现返回数据
+   * 这里client两种发送数据的方式：
+   *    send方法直接调用channel.writeAndFlush(new OneWayMessage)发出消息就完事
+   *    sendRpc方法中除了发送数据外还是触发回调函数的逻辑，不知道为啥，spark通过handler触发正常返回的回调通过netty的listener直接在失败时把回调函数从map中删除
+   *
+   * 有两个handler比较容易搞迷：
+   *    TransportResponseHandler: 客户端处理返回触发回调（客户端读到数据），例如：客户端发送消息，服务端返回的数据回调需要通过这个handler实现
+   *    TransportRequestHandler: 服务端处理请求（服务端读到数据），通过这个调用rpcHandler的receive, 最终会调用RpcEndpoint的receive/receiveAndReply
+   *
+   * spark是怎么获取每次请求返回对应的回调呢？RpcOutboxMessage和返回的RpcResponse他们的requestId是一样的，通过requestId获取回调
+   * 不知道为啥没用netty内置的回调函数listener实现
+   *
+   * 这里似乎没有服务端主动给客户端发送数据，并读取返回数据
+   *
+   * @param message
+   */
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
     nettyEnv.send(new RequestMessage(nettyEnv.address, this, message))
@@ -691,6 +738,12 @@ private[netty] class NettyRpcHandler(
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
+  /**
+   * 把message反序列化成我们的传的对象
+   * @param client
+   * @param message
+   * @return
+   */
   private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)

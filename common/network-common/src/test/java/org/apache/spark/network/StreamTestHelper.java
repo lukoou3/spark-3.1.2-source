@@ -60,7 +60,7 @@ class StreamTestHelper {
     FileOutputStream fp = new FileOutputStream(testFile);
     try {
       Random rnd = new Random();
-      for (int i = 0; i < 512; i++) {
+      for (int i = 0; i < 5120; i++) {
         byte[] fileContent = new byte[1024];
         rnd.nextBytes(fileContent);
         fp.write(fileContent);
@@ -84,6 +84,7 @@ class StreamTestHelper {
   }
 
   public ManagedBuffer openStream(TransportConf conf, String streamId) {
+    // 数据源：复制数组和文件
     switch (streamId) {
       case "file":
         return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());

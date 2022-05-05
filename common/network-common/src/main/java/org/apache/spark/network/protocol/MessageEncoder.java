@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 消息编码器
  * Encoder used by the server side to encode server-to-client responses.
  * This encoder is stateless so it is safe to be shared by multiple threads.
  */
@@ -51,6 +52,7 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     long bodyLength = 0;
     boolean isBodyInFrame = false;
 
+    // 如果消息有正文，将其取出以启用有效负载的零拷贝传输。
     // If the message has a body, take it out to enable zero-copy transfer for the payload.
     if (in.body() != null) {
       try {
@@ -77,13 +79,16 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     // All messages have the frame length, message type, and message itself. The frame length
     // may optionally include the length of the body data, depending on what message is being
     // sent.
+    // frame length, msgType length, in length
+    // header长度：Frame长度(8:报文总的长度) + 类型长度(1:哪种类型) + Message长度(message header长度)
     int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
+    // 报文总的长度 = header长度 + 内容长度
     long frameLength = headerLength + (isBodyInFrame ? bodyLength : 0);
     ByteBuf header = ctx.alloc().buffer(headerLength);
-    header.writeLong(frameLength);
-    msgType.encode(header);
-    in.encode(header);
-    assert header.writableBytes() == 0;
+    header.writeLong(frameLength); // 写入报文总的长度(8)
+    msgType.encode(header);// 写入类型长度(8)
+    in.encode(header);// 写入message header长度(动态)
+    assert header.writableBytes() == 0; // 断言header ByteBuf空间全部写完
 
     if (body != null) {
       // We transfer ownership of the reference on in.body() to MessageWithHeader.

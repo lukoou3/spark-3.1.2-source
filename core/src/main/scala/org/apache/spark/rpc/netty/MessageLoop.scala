@@ -45,6 +45,7 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
 
   private var stopped = false
 
+  // 向endpoint的收信箱中放入消息
   def post(endpointName: String, message: InboxMessage): Unit
 
   def unregister(name: String): Unit
@@ -72,6 +73,7 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
             setActive(MessageLoop.PoisonPill)
             return
           }
+          // 处理收信箱中的消息
           inbox.process(dispatcher)
         } catch {
           case NonFatal(e) => logError(e.getMessage, e)

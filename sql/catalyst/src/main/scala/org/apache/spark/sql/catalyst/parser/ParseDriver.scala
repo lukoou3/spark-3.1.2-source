@@ -84,6 +84,10 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: AstBuilder
 
+  /**
+   * 这个就是语法解析的入口吗
+   *
+   */
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logDebug(s"Parsing command: $command")
 

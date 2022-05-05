@@ -78,6 +78,10 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
     int available = nioBuffer.remaining();
     callback.onData(streamId, nioBuffer);
     bytesRead += available;
+    /**
+     * bytesRead: 实际读到的大小
+     * byteCount: 总共需要读取的大小
+     */
     if (bytesRead > byteCount) {
       RuntimeException re = new IllegalStateException(String.format(
         "Read too many bytes? Expected %d, but read %d.", byteCount, bytesRead));

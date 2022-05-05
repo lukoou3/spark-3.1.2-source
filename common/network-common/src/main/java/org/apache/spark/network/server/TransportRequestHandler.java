@@ -156,8 +156,23 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
   }
 
+  /**
+   * 处理ask的RpcRequest，并返回
+   * @param req
+   */
   private void processRpcRequest(final RpcRequest req) {
     try {
+      // 处理ask的RpcRequest，在RpcResponseCallback会中会返回结果
+      // 这里仅仅是把消息发送到Dispatcher，Dispatcher中再把消息发给对应的endpoint
+      /**
+       * RpcResponseCallback 会在ref中返回数据后回调，发送返回数据：
+       *   override protected def send(message: Any): Unit = {
+       *     val reply = nettyEnv.serialize(message)
+       *     callback.onSuccess(reply)
+       *   }
+       * respond发送返回的方法中直接把RpcResponse写出：channel.writeAndFlush(result)
+       */
+
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {

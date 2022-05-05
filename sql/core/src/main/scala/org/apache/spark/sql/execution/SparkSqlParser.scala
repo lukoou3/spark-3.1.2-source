@@ -328,6 +328,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * 实现CreateTempViewUsing
    * Creates a [[CreateTempViewUsing]] logical plan.
    */
   override def visitCreateTempViewUsing(

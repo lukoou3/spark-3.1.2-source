@@ -29,6 +29,8 @@ private[spark] trait RpcEnvFactory {
 }
 
 /**
+ * 这个其实就是服务端，receive和receiveAndReply用于处理消息，这俩方法返回的都是偏函数
+ * 这里使用偏函数确实比较方便，自己要是实现类似的功能可以借鉴借鉴
  * An end point for the RPC that defines what functions to trigger given a message.
  *
  * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.

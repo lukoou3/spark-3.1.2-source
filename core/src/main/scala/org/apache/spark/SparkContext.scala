@@ -551,6 +551,10 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
 
+    /**
+     * driver端的心跳接收器，必须在createTaskScheduler之前注册，因为Executor会检索查找HeartbeatReceiver
+     * HeartbeatReceiver就是RpcEndpoint，而且是ThreadSafeRpcEndpoint
+     */
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(

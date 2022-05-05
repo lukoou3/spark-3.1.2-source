@@ -41,7 +41,9 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
   @Override
   public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
+    // 消息类型：ChunkFetchRequest, RpcRequest, RpcResponse 等
     Message.Type msgType = Message.Type.decode(in);
+    // 解析出Message
     Message decoded = decode(msgType, in);
     assert decoded.type() == msgType;
     logger.trace("Received message {}: {}", msgType, decoded);

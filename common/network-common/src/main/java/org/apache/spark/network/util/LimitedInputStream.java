@@ -42,6 +42,9 @@ import java.io.InputStream;
 import com.google.common.base.Preconditions;
 
 /**
+ * 包装输入流，限制可读取的字节数。
+ * 这段代码来自Guava的14.0源代码，因为在Guava 11环境和Guava>14环境中都没有兼容的方法来使用这一功能。
+ *
  * Wraps a {@link InputStream}, limiting the number of bytes which can be read.
  *
  * This code is from Guava's 14.0 source code, because there is no compatible way to

@@ -183,6 +183,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           "Failure while fetching " + resp.streamChunkId + ": " + resp.errorString));
       }
     } else if (message instanceof RpcResponse) {
+      // 收到rpc返回，调用回调函数
       RpcResponse resp = (RpcResponse) message;
       RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {

@@ -41,6 +41,13 @@ import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.*;
 
 /**
+ * 服务端的Server，当服务端模式的RpcEnv创建时创建，RpcEnv默认就是服务端模式clientMode: Boolean = false (默认)时
+ * TransportServer就是spark底层的服务实现，用于调用netty api
+ * TransportServer是怎么和spark其它组件配合的呢，通过RpcHandler appRpcHandler变量，会通过RpcHandler创建TransportChannelHandler
+ * TransportChannelHandler会直接加入的channel.pipeline中，用于处理netty中的消息，主要用于处理Request消息
+ *    服务端处理request消息的Handler，通过rpcHandler实现：
+ *       仅仅是把消息发送到Dispatcher，Dispatcher中再把消息发给对应的endpoint的收信箱
+ *
  * Server for the efficient, low-level streaming service.
  */
 public class TransportServer implements Closeable {
@@ -97,6 +104,10 @@ public class TransportServer implements Closeable {
     return port;
   }
 
+  /**
+   * 服务端初始化
+   *
+   */
   private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
@@ -140,6 +151,7 @@ public class TransportServer implements Closeable {
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
         }
+        // rpcHandler:[[org.apache.spark.rpc.netty.NettyRpcHandler]]
         context.initializePipeline(ch, rpcHandler);
       }
     });

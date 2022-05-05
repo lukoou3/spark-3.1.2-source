@@ -110,6 +110,7 @@ private[spark] class Executor(
       .setNameFormat("Executor task launch worker-%d")
       .setThreadFactory((r: Runnable) => new UninterruptibleThread(r, "unused"))
       .build()
+    // 这个线程池没设置最大线程数，估计是调度器控制了，这里就没限制
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
   private val schemes = conf.get(EXECUTOR_METRICS_FILESYSTEM_SCHEMES)
@@ -207,12 +208,14 @@ private[spark] class Executor(
     METRICS_POLLING_INTERVAL_MS,
     executorMetricsSource)
 
+  // Executor的心跳线程定时心跳，发送[[org.apache.spark.Heartbeat]]
   // Executor for the heartbeat task.
   private val heartbeater = new Heartbeater(
     () => Executor.this.reportHeartBeat(),
     "executor-heartbeater",
     HEARTBEAT_INTERVAL_MS)
 
+  // 获取driver端的heartbeatReceiver的客户端，name = HeartbeatReceiver
   // must be initialized before running startDriverHeartbeat()
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)

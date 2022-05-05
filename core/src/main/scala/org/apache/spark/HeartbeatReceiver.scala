@@ -112,6 +112,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
+    // 这些消息都是driver自己发的，在其他地方监控到数据然后发的这些消息
     // Messages sent and received locally
     case ExecutorRegistered(executorId) =>
       executorLastSeen(executorId) = clock.getTimeMillis()
@@ -126,6 +127,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       expireDeadHosts()
       context.reply(true)
 
+    // 这个executor的heartbeater定时发的
     // Messages received from executors
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
       var reregisterBlockManager = !sc.isStopped
