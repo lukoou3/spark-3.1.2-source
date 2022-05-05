@@ -330,7 +330,8 @@ public class RpcIntegrationSuite {
    * 这个是文件上传的场景：实现文件的传输
    * 可以看到UploadStream的isBodyInFrame是false，但是body实际是有的，这个实现和下载类似：第一次解析出UploadStream的Frame设置interceptor，之后收到的文件body都通过interceptor处理
    *
-   *
+   * 文件上传和下载的流程基本都清除了，接下来准备看看TransportFrameDecoder的实现，看看怎么实现划分Frame的，看懂了会对netty有进一步的理解
+   * 可以先看看netty ByteToMessageDecoder的几个子类怎么实现划分的例如：FixedLengthFrameDecoder, LineBasedFrameDecoder, LengthFieldBasedFrameDecoder等，对比着看
    */
   @Test
   public void sendFileUploadStream() throws Exception {
