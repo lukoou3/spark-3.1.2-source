@@ -54,6 +54,7 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
 
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        // 每次就读一个，父类会循环调用decode
         Object decoded = decode(ctx, in);
         if (decoded != null) {
             out.add(decoded);
@@ -73,6 +74,7 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
         if (in.readableBytes() < frameLength) {
             return null;
         } else {
+            // 子ByteBuf切片并且增加这个ByteBuf的readerIndex
             return in.readRetainedSlice(frameLength);
         }
     }

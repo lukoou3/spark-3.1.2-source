@@ -396,17 +396,28 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
             discardingTooLongFrame(in);
         }
 
+        /**
+         * lengthField都读不够，直接返回。这个读取的是内容长度
+         * 其实这个和FixedLengthFrameDecoder类似，就是每个msg读取的长度会动态变化，下面的大致逻辑我们也能猜想得到
+         */
         if (in.readableBytes() < lengthFieldEndOffset) {
             return null;
         }
 
+        // 实际的lengthFieldOffset，需要增加readerIndex
         int actualLengthFieldOffset = in.readerIndex() + lengthFieldOffset;
+        // 读取字段长度，并不会修改readerIndex，因为这个报文可能
+        // byteOrder: 默认大端，这个可以忽略不计
         long frameLength = getUnadjustedFrameLength(in, actualLengthFieldOffset, lengthFieldLength, byteOrder);
 
+        // 内容长度为负数，抛出异常
         if (frameLength < 0) {
             failOnNegativeLengthField(in, frameLength, lengthFieldEndOffset);
         }
 
+        /**
+         * 参数较多，下面就是各种长度判断，感觉没啥好看的，先不看下面的
+         */
         frameLength += lengthAdjustment + lengthFieldEndOffset;
 
         if (frameLength < lengthFieldEndOffset) {

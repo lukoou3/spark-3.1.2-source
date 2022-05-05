@@ -80,21 +80,25 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     totalSize += in.readableBytes();
 
     while (!buffers.isEmpty()) {
+      // 如果interceptor不为null，就调用interceptor，主要用于文件上传下载的流实现
       // First, feed the interceptor, and if it's still, active, try again.
       if (interceptor != null) {
         ByteBuf first = buffers.getFirst();
         int available = first.readableBytes();
+        // 喂interceptor
         if (feedInterceptor(first)) {
           assert !first.isReadable() : "Interceptor still active but buffer has data.";
         }
 
         int read = available - first.readableBytes();
+        // first读完了
         if (read == available) {
           buffers.removeFirst().release();
         }
         totalSize -= read;
       } else {
         // Interceptor is not active, so try to decode one frame.
+        // 解码frame
         ByteBuf frame = decodeNext();
         if (frame == null) {
           break;
@@ -104,29 +108,50 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     }
   }
 
+  /**
+   * 编码出frame的大小，正常情况下一个报文就能解析出，毕竟只需要读取8个字节
+   */
   private long decodeFrameSize() {
+    /**
+     * 从MessageEncoder可以知道，spark的报文总体结构是固定的: 报文总长度(8字节) + 内容， LENGTH_SIZE就是常量8，报文总长度所占的字节
+     * 下个frame的大小已知返回nextFrameSize；总长度不够8字节直接返回 -1 UNKNOWN_FRAME_SIZE
+     */
     if (nextFrameSize != UNKNOWN_FRAME_SIZE || totalSize < LENGTH_SIZE) {
       return nextFrameSize;
     }
 
+    /**
+     * 我们知道有足够的数据。如果第一个缓冲区包含所有数据，那就太好了。
+     * 否则，将帧长度的字节保存在复合缓冲区中，直到有足够的数据读取帧大小。
+     * 通常情况下，很少需要一个以上的缓冲区来读取帧大小。
+     */
     // We know there's enough data. If the first buffer contains all the data, great. Otherwise,
     // hold the bytes for the frame length in a composite buffer until we have enough data to read
     // the frame size. Normally, it should be rare to need more than one buffer to read the frame
     // size.
     ByteBuf first = buffers.getFirst();
     if (first.readableBytes() >= LENGTH_SIZE) {
+      // 这里直接调用的readLong，MessageDecoder并不需要解析这8个字节。frame的大小就是内容的长度
       nextFrameSize = first.readLong() - LENGTH_SIZE;
       totalSize -= LENGTH_SIZE;
+      // 如果first读完就直接释放
       if (!first.isReadable()) {
         buffers.removeFirst().release();
       }
       return nextFrameSize;
     }
 
+    /**
+     * frameLenBuf：固定8个字节的ByteBuf，用于读取内容长度头信息
+     * 读够8个字节就停止，这里没有ByteBuf的合并，高效
+     * 这里肯定能读够8个字节，这个方法的开头就判断了
+     */
     while (frameLenBuf.readableBytes() < LENGTH_SIZE) {
       ByteBuf next = buffers.getFirst();
+      // 需要读取的大小
       int toRead = Math.min(next.readableBytes(), LENGTH_SIZE - frameLenBuf.readableBytes());
       frameLenBuf.writeBytes(next, toRead);
+      // 读完释放
       if (!next.isReadable()) {
         buffers.removeFirst().release();
       }
@@ -134,27 +159,32 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
     nextFrameSize = frameLenBuf.readLong() - LENGTH_SIZE;
     totalSize -= LENGTH_SIZE;
-    frameLenBuf.clear();
+    frameLenBuf.clear(); // 这里需要清空
     return nextFrameSize;
   }
 
   private ByteBuf decodeNext() {
+    // 解析出frame的大小，一般能解析，只需读取8个字节
     long frameSize = decodeFrameSize();
     if (frameSize == UNKNOWN_FRAME_SIZE) {
       return null;
     }
 
     if (frameBuf == null) {
+      // frame的大小不能太大也不能小于0
       Preconditions.checkArgument(frameSize < MAX_FRAME_SIZE,
           "Too large frame: %s", frameSize);
       Preconditions.checkArgument(frameSize > 0,
           "Frame length should be positive: %s", frameSize);
       frameRemainingBytes = (int) frameSize;
 
+      // 如果缓冲区为空，则立即返回以获取更多输入数据。
       // If buffers is empty, then return immediately for more input data.
       if (buffers.isEmpty()) {
         return null;
       }
+
+      // 否则，如果第一个buffer足够，解码出Frame返回。
       // Otherwise, if the first buffer holds the entire frame, we attempt to
       // build frame with it and return.
       if (buffers.getFirst().readableBytes() >= frameRemainingBytes) {
@@ -167,11 +197,16 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       frameBuf = buffers.getFirst().alloc().compositeBuffer(Integer.MAX_VALUE);
     }
 
+    // 缓冲frame需要读的buf到frameBuf
     while (frameRemainingBytes > 0 && !buffers.isEmpty()) {
+      // 下一个ByteBuf用于填充Frame
       ByteBuf next = nextBufferForFrame(frameRemainingBytes);
       frameRemainingBytes -= next.readableBytes();
       frameBuf.addComponent(true, next);
     }
+
+
+    // 如果frameBuf的增量大小超过阈值，那么我们会进行整合以减少内存消耗
     // If the delta size of frameBuf exceeds the threshold, then we do consolidation
     // to reduce memory consumption.
     if (frameBuf.capacity() - consolidatedFrameBufSize > consolidateThreshold) {
@@ -180,10 +215,13 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       consolidatedFrameBufSize = frameBuf.capacity();
       consolidatedNumComponents = frameBuf.numComponents();
     }
+
+    // frame没读够
     if (frameRemainingBytes > 0) {
       return null;
     }
 
+    // 读够, 消费当前的frameBuf。frameBuf就是全部的frame
     return consumeCurrentFrameBuf();
   }
 
@@ -198,6 +236,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
   }
 
   /**
+   * 下一个ByteBuf用于填充Frame
    * Takes the first buffer in the internal list, and either adjust it to fit in the frame
    * (by taking a slice out of it) or remove it from the internal list.
    */
