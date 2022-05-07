@@ -29,18 +29,22 @@ import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcEndpoint}
 import org.apache.spark.util.ThreadUtils
 
 /**
+ * Dispatcher用来向端点传递消息的消息循环。
  * A message loop used by [[Dispatcher]] to deliver messages to endpoints.
  */
 private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Logging {
 
+  // 等待处理的收件箱列表，Inbox储存了一个endpoint的messages
   // List of inboxes with pending messages, to be processed by the message loop.
   private val active = new LinkedBlockingQueue[Inbox]()
 
+  // 消息循环任务；在消息循环线程池的所有线程中运行。
   // Message loop task; should be run in all threads of the message loop's pool.
   protected val receiveLoopRunnable = new Runnable() {
     override def run(): Unit = receiveLoop()
   }
 
+  //每个线程都运行receiveLoopRunnable
   protected val threadpool: ExecutorService
 
   private var stopped = false
@@ -63,11 +67,13 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
 
   protected final def setActive(inbox: Inbox): Unit = active.offer(inbox)
 
+  // 循环处理消息
   private def receiveLoop(): Unit = {
     try {
       while (true) {
         try {
           val inbox = active.take()
+          // 终止时才会加入PoisonPill，标记停止事件循环
           if (inbox == MessageLoop.PoisonPill) {
             // Put PoisonPill back so that other threads can see it.
             setActive(MessageLoop.PoisonPill)
@@ -94,11 +100,14 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
 }
 
 private object MessageLoop {
+  // 指示邮件循环应停止处理邮件的毒药收件箱。
   /** A poison inbox that indicates the message loop should stop processing messages. */
   val PoisonPill = new Inbox(null, null)
 }
 
 /**
+ * 使用共享线程池为多个endpoints提供服务的消息循环。
+ * 存有每个endpoint的收信箱
  * A message loop that serves multiple RPC endpoints, using a shared thread pool.
  */
 private class SharedMessageLoop(
@@ -107,6 +116,7 @@ private class SharedMessageLoop(
     numUsableCores: Int)
   extends MessageLoop(dispatcher) {
 
+  // 每个endpoint的收信箱
   private val endpoints = new ConcurrentHashMap[String, Inbox]()
 
   private def getNumOfThreads(conf: SparkConf): Int = {
@@ -127,11 +137,13 @@ private class SharedMessageLoop(
     val numThreads = getNumOfThreads(conf)
     val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
     for (i <- 0 until numThreads) {
+      // 每个线程都执行receiveLoopRunnable
       pool.execute(receiveLoopRunnable)
     }
     pool
   }
 
+  // 向endpoint的收信箱中放入消息
   override def post(endpointName: String, message: InboxMessage): Unit = {
     val inbox = endpoints.get(endpointName)
     inbox.post(message)
@@ -142,11 +154,15 @@ private class SharedMessageLoop(
     val inbox = endpoints.remove(name)
     if (inbox != null) {
       inbox.stop()
+      // 标记inbox(收件箱)为活跃，触发OnStop消息
       // Mark active to handle the OnStop message.
       setActive(inbox)
     }
   }
 
+  /**
+   * 注册endpoint，并且标记inbox(收件箱)为活跃，inbox初始化时会放入OnStart消息，触发OnStart消息
+   */
   def register(name: String, endpoint: RpcEndpoint): Unit = {
     val inbox = new Inbox(name, endpoint)
     endpoints.put(name, inbox)

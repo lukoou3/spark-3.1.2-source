@@ -87,6 +87,13 @@ class NettyBlockTransferServiceSuite
     verifyServicePort(expectedPort = service0.port + 1, actualPort = service1.port)
   }
 
+  /**
+   * 测试fetch block时，目标服务executor已销毁
+   * 涉及到多个机器多个进程的通信，这里使用mock模拟，可以借鉴
+   *
+   * 模拟NettyBlockTransferService.fetchBlocks从executor拉取block时，触发IOException，
+   * 然后询问driver这个executor是否Alive，driver返回这个executor已死亡
+   */
   test("SPARK-27637: test fetch block with executor dead") {
     implicit val executionContext = ExecutionContext.global
     val port = 17634 + Random.nextInt(10000)
@@ -96,12 +103,17 @@ class NettyBlockTransferServiceSuite
       override def address: RpcAddress = null
       override def name: String = "test"
       override def send(message: Any): Unit = {}
+      // 这个rpcEndPointRef总是返回false，为了测试达到ExecutorDeadException。看：NettyBlockTransferService.fetchBlocks
       // This rpcEndPointRef always return false for unit test to touch ExecutorDeadException.
       override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
         Future{false.asInstanceOf[T]}
       }
     }
 
+    /**
+     * 模拟clientFactory和client，clientFactory的clientFactory总是返回client
+     * client.sendRpc抛出IOException异常，用于NettyBlockTransferService.fetchBlocks中抛出异常
+     */
     val clientFactory = mock(classOf[TransportClientFactory])
     val client = mock(classOf[TransportClient])
     // This is used to touch an IOException during fetching block.
@@ -117,6 +129,7 @@ class NettyBlockTransferServiceSuite
     when(listener.onBlockFetchFailure(any(), any(classOf[ExecutorDeadException])))
       .thenAnswer(_ => {hitExecutorDeadException = true})
 
+    // 这里通过反射修改service的clientFactory
     service0 = createService(port, driverEndpointRef)
     val clientFactoryField = service0.getClass
       .getSuperclass.getSuperclass.getDeclaredField("clientFactory")

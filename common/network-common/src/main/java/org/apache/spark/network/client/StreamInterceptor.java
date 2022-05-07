@@ -27,6 +27,7 @@ import org.apache.spark.network.server.MessageHandler;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**
+ * 在帧解码器中注册的一种拦截器，用于向回调提供流数据。
  * An interceptor that is registered with the frame decoder to feed stream data to a
  * callback.
  */
@@ -62,6 +63,7 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
     callback.onFailure(streamId, new ClosedChannelException());
   }
 
+  // 停止Stream
   private void deactivateStream() {
     if (handler instanceof TransportResponseHandler) {
       // we only have to do this for TransportResponseHandler as it exposes numOutstandingFetches
@@ -72,6 +74,12 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
 
   @Override
   public boolean handle(ByteBuf buf) throws Exception {
+    /**
+     * byteCount: 总共需要读取的大小
+     * bytesRead: 实际已经读的大小
+     * byteCount - bytesRead 逻辑上还需读的大小
+     * toRead：这次需要读的大小
+     */
     int toRead = (int) Math.min(buf.readableBytes(), byteCount - bytesRead);
     ByteBuffer nioBuffer = buf.readSlice(toRead).nioBuffer();
 
@@ -79,7 +87,7 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
     callback.onData(streamId, nioBuffer);
     bytesRead += available;
     /**
-     * bytesRead: 实际读到的大小
+     * bytesRead: 实际已经读的大小
      * byteCount: 总共需要读取的大小
      */
     if (bytesRead > byteCount) {
@@ -93,6 +101,7 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
       callback.onComplete(streamId);
     }
 
+    // 是否还需要读
     return bytesRead != byteCount;
   }
 

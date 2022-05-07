@@ -194,6 +194,7 @@ public class TransportContext implements Closeable {
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
         .addLast("decoder", DECODER)
+        // 这个似乎是心跳，不是超时
         .addLast("idleStateHandler",
           new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this

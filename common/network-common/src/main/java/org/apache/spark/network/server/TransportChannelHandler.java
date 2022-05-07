@@ -162,14 +162,17 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         boolean isActuallyOverdue =
           System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
         if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
+          // 有发出的请求，但没收到回复
           if (hasInFlightRequests) {
             String address = getRemoteAddress(ctx.channel());
+            // 超时
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust spark.network.timeout if " +
               "this is wrong.", address, requestTimeoutNs / 1000 / 1000);
             client.timeOut();
             ctx.close();
           } else if (closeIdleConnections) {
+            // 配置了关闭闲置连接
             // While CloseIdleConnections is enable, we also close idle connection
             client.timeOut();
             ctx.close();

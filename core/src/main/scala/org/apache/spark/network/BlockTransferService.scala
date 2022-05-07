@@ -29,6 +29,8 @@ import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
 import org.apache.spark.util.ThreadUtils
 
 /**
+ * 用于获取一组块的BlockTransferService。BlockTransferService的每个实例都包含客户端和服务端。
+ *
  * The BlockTransferService that used for fetching a set of blocks at time. Each instance of
  * BlockTransferService contains both client and server inside.
  */

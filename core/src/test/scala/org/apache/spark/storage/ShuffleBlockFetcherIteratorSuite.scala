@@ -123,6 +123,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
   }
 
+  /**
+   * 看这个注释，这个测试方法很nb啊，实现shuffle read从local模式和集群local和远程excutor
+   * 这里使用了mock库来创建BlockManager，修改BlockManager的实现模拟从local,host local,remote 读数据
+   *
+   */
   test("successful 3 local + 4 host local + 2 remote reads") {
     val blockManager = createMockBlockManager()
     val localBmId = blockManager.blockManagerId
@@ -133,6 +138,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
     localBlocks.foreach { case (blockId, buf) =>
+      // 当调用blockManager的getLocalBlockData方法时返回buf
       doReturn(buf).when(blockManager).getLocalBlockData(meq(blockId))
     }
 
@@ -142,6 +148,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 3, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 4, 0) -> createMockManagedBuffer())
 
+    // 模拟transfer.fetchBlocks方法
     val transfer = createMockTransfer(remoteBlocks)
 
     // Create a block manager running on the same host (host-local)
@@ -153,6 +160,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 8, 0) -> createMockManagedBuffer())
 
     hostLocalBlocks.foreach { case (blockId, buf) =>
+      // 当调用blockManager的getHostLocalShuffleData方法时返回buf
       doReturn(buf)
         .when(blockManager)
         .getHostLocalShuffleData(meq(blockId.asInstanceOf[ShuffleBlockId]), any())

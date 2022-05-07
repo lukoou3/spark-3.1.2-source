@@ -204,6 +204,9 @@ public class TransportClient implements Closeable {
   }
 
   /**
+   * 上传数据到远程服务器使用stream，
+   * 这个spark内部用的比较少，好像用于remote shuffle service，上传block到remote shuffle service，org.apache.spark.network.shuffle.OneForOneBlockPusher
+   *
    * Send data to the remote end as a stream.  This differs from stream() in that this is a request
    * to *send* data to the remote end, not to receive it from the remote.
    *

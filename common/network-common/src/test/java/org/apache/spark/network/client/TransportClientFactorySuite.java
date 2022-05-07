@@ -18,6 +18,7 @@
 package org.apache.spark.network.client;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,9 +56,12 @@ public class TransportClientFactorySuite {
 
   @Before
   public void setUp() {
+    // 创建server的步骤
     conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
+    // RpcHandler作为仅仅作为客户端的TransportContext，receive方法会抛出异常
     RpcHandler rpcHandler = new NoOpRpcHandler();
     context = new TransportContext(conf, rpcHandler);
+    // 这俩server都不能返回数据
     server1 = context.createServer();
     server2 = context.createServer();
   }
@@ -70,6 +74,14 @@ public class TransportClientFactorySuite {
   }
 
   /**
+   * 测试client重用，
+   * 批量创建连接单个server的多个client，测试最大连接数，如果concurrent为true，会并行创建client
+   * org.apache.spark.network.util.TransportConf.numConnectionsPerPeer() 默认是1，
+   * numConnectionsPerPeer.numConnectionsPerPeer = TransportConf.numConnectionsPerPeer()
+   * 也就是TransportClientFactory默认会共用一个client
+   * TransportClientFactory中维护一个clientPool，大小为numConnectionsPerPeer，
+   * TransportClientFactory每次createClient时从clientPool.clients数组中随机返回一个
+   *
    * Request a bunch of clients to a single server to test
    * we create up to maxConnections of clients.
    *
@@ -106,6 +118,7 @@ public class TransportClientFactorySuite {
           }
         });
 
+        // 是否并发创建
         if (concurrent) {
           attempts[i].start();
         } else {
@@ -145,6 +158,10 @@ public class TransportClientFactorySuite {
     testClientReuse(4, true);
   }
 
+  /**
+   * 同一个factory，可以创建不同server的client
+   *
+   */
   @Test
   public void returnDifferentClientsForDifferentServers() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
@@ -160,6 +177,7 @@ public class TransportClientFactorySuite {
   public void neverReturnInactiveClients() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    // 我说咋Inactive了，这里主动关闭了
     c1.close();
 
     long start = System.currentTimeMillis();
@@ -208,14 +226,42 @@ public class TransportClientFactorySuite {
         throw new UnsupportedOperationException();
       }
     });
+
+    /**
+     * 这里把closeIdleConnections设置成了true，默认是false，所以会关闭限制的连接
+     * 搜了一下spark中设置closeIdleConnections为true的几处都是下载文件相关的，不是长期的客户端
+     *
+     * 一个TransportClientFactory可以创建多个不同服务的Client，共用的workerGroup，我还以为一个Client需要从头建workerGroup，这样可以同时建很多客户端把
+     *
+     * client断开连接后怎么办，从方法上看send不会报错，sendRpcSync/askSync可以监控到，自己使用时怎么办呢
+     *    使用spark的rpcEndpointRef测试了一下，发现断开连接(catch住异常防止程序停止)后仍能发消息，发现Outbox不是一个对象了
+     *    出错时对应服务端的Outbox会被删除，重新创建[[org.apache.spark.rpc.netty.NettyRpcHandler#channelInactive]]
+     *    nettyEnv断开连接后的处理，删除发件箱，下次发送时可以新建发件箱，能重新发送消息
+     *
+     * netty和spark的network太复杂了，要是想自己基于netty实现network通信真是太难了
+     */
     try (TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
          TransportClientFactory factory = context.createClientFactory()) {
       TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
       assertTrue(c1.isActive());
+      // 1s 就空闲超时， spark默认是120s
+      System.out.println(System.currentTimeMillis());
       long expiredTime = System.currentTimeMillis() + 10000; // 10 seconds
       while (c1.isActive() && System.currentTimeMillis() < expiredTime) {
         Thread.sleep(10);
       }
+      System.out.println(expiredTime);
+      System.out.println(System.currentTimeMillis());
+
+      /**
+       * 关闭后writeAndFlush方法不会报错
+       * sendRpcSync方法中添加了回调函数才能监控到
+       * 打了下断点，发现write只是把task提交到循环，不添加回调函数的话，Channel close时writeAndFlush也不会报错
+       */
+      c1.getChannel().writeAndFlush(ByteBuffer.allocate(10));
+      System.out.println("ok");
+      c1.sendRpcSync(ByteBuffer.allocate(10), 2000);
+
       assertFalse(c1.isActive());
     }
   }

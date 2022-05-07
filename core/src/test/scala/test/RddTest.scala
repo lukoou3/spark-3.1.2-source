@@ -1,7 +1,5 @@
 package org.apache.spark.rdd
 
-import java.util
-
 import org.apache.spark.{SparkConf, SparkContext}
 
 object RddTest {
@@ -14,7 +12,7 @@ object RddTest {
     rdd.map((_, 1)).mapValues(_ + 1).keys.max()
     rdd.map((_, 1)).sortBy(_._1).repartition(2)
     rdd.map((_, 1)).sortByKey().repartition(6)
-    util.Arrays.asList(1, 2, 4).forEach(println(_))
+    java.util.Arrays.asList(1, 2, 4).forEach(println(_))
     val rsts: Array[(String, Int)] = rdd.flatMap(_.split(" "))
       .filter(_.nonEmpty)
       .map((_, 1))
@@ -22,7 +20,7 @@ object RddTest {
       .collect()
     println(rsts.toBuffer)
 
-    rdd.toJavaRDD().mapPartitions()
+    //rdd.toJavaRDD().mapPartitions()
 
     sc.stop()
   }

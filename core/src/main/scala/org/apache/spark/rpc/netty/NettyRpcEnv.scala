@@ -62,6 +62,7 @@ private[netty] class NettyRpcEnv(
 
   private val streamManager = new NettyStreamManager(this)
 
+  // server和client都是使用的这个transportContext, rpc的处理逻辑在NettyRpcHandler中，使用dispatcher实现rpc和network模块的解耦
   private val transportContext = new TransportContext(transportConf,
     new NettyRpcHandler(dispatcher, this, streamManager))
 
@@ -95,6 +96,10 @@ private[netty] class NettyRpcEnv(
     "netty-rpc-connection",
     conf.get(RPC_CONNECT_THREADS))
 
+  /**
+   * 实际的服务端。不是可以注册多个RpcEndpoint吗，咋这只有一个server。
+   * RpcEndpoint就是一个逻辑的服务端点，使用name进行注册，服务端只会监听一个端口，多个RpcEndpoint用来实现分模块处理不同业务的消息
+   */
   @volatile private var server: TransportServer = _
 
   private val stopped = new AtomicBoolean(false)
@@ -116,6 +121,10 @@ private[netty] class NettyRpcEnv(
     }
   }
 
+  /**
+   * 初始化方法
+   *
+   */
   def startServer(bindAddress: String, port: Int): Unit = {
     val bootstraps: java.util.List[TransportServerBootstrap] =
       if (securityManager.isAuthenticationEnabled()) {
@@ -123,7 +132,9 @@ private[netty] class NettyRpcEnv(
       } else {
         java.util.Collections.emptyList()
       }
+    // 实际的server:TransportServer
     server = transportContext.createServer(bindAddress, port, bootstraps)
+    // 注册RpcEndpointVerifier，验证RpcEndpoint是否存在。远程检索RpcEndpointRef时会给这个发消息验证服务端RpcEndpoint是否存在。
     dispatcher.registerRpcEndpoint(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
@@ -134,6 +145,7 @@ private[netty] class NettyRpcEnv(
   }
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
+    // 使用name把endpoint注册到dispatcher
     dispatcher.registerRpcEndpoint(name, endpoint)
   }
 
@@ -200,9 +212,11 @@ private[netty] class NettyRpcEnv(
    */
   private[netty] def send(message: RequestMessage): Unit = {
     val remoteAddr = message.receiver.address
+    // 这个当前进程连接Endpoint返回的EndpointRef是local吗？是local，同一个进程另外注册一个env，然后返回的ref发消息不会走本地。address不一样
     if (remoteAddr == address) {
       // Message to a local RPC endpoint.
       try {
+        // 直接放到自己的收件箱了，省去了网络传输
         dispatcher.postOneWayMessage(message)
       } catch {
         case e: RpcEnvStoppedException => logDebug(e.getMessage)
@@ -528,6 +542,11 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 }
 
 /**
+ * RpcEndpointRef的NettyRpcEnv版本。
+ * 该类的行为因其创建位置而异。在拥有RpcEndpoint的节点上，它是围绕RpcEndpointAddress实例的简单包装。
+ * 在接收序列化版本引用的其他机器上，行为会发生变化。实例将跟踪发送引用的TransportClient，以便通过客户端连接发送到端点的消息，而不需要打开新连接。
+ * rpcadAddress可以为空；这意味着ref只能通过客户端连接使用，因为承载端点的进程没有监听传入的连接。这些ref不应与第三方共享，因为它们将无法向端点发送消息。
+ *
  * The NettyRpcEnv version of RpcEndpointRef.
  *
  * This class behaves differently depending on where it's created. On the node that "owns" the
@@ -608,6 +627,7 @@ private[netty] class NettyRpcEndpointRef(
    */
   override def send(message: Any): Unit = {
     require(message != null, "Message is null")
+    // nettyEnv.address(发送方地址)，this(接收方)就是这个EndpointRef，message(消息内容)
     nettyEnv.send(new RequestMessage(nettyEnv.address, this, message))
   }
 
@@ -704,6 +724,9 @@ private[netty] object RequestMessage {
 private[netty] case class RpcFailure(e: Throwable)
 
 /**
+ * 将传入的RPC发送到已注册的端点。把消息转发给dispatcher
+ * 原始的消息处理逻辑在TransportRequestHandler中，这个类就是方便network以外的模块扩展
+ *
  * Dispatches incoming RPCs to registered endpoints.
  *
  * The handler keeps track of all client instances that communicate with it, so that the RpcEnv
@@ -791,11 +814,16 @@ private[netty] class NettyRpcHandler(
     dispatcher.postToAll(RemoteProcessConnected(clientAddr))
   }
 
+  /**
+   * 断开连接后的处理，删除发件箱，下次发送时可以新建发件箱，能重新发送消息
+   * @param client
+   */
   override def channelInactive(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
       val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
       nettyEnv.removeOutbox(clientAddr)
+      // 通知所有端点这个事件
       dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
       val remoteEnvAddress = remoteAddresses.remove(clientAddr)
       // If the remove RpcEnv listens to some address, we should also  fire a

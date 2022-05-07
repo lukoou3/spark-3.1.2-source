@@ -60,6 +60,14 @@ private[spark] object RpcEnv {
 
 
 /**
+ * 一个RPC环境。RpcEndpoint(服务端)需要用一个name注册它本身到RpcEnv用来接收消息。
+ * 然后RpcEnv将处理从RpcEndpointRef或远程节点发送的消息，并将它们传递到相应的RpcEndpoint。
+ * 对于RpcEnv捕获的未捕获异常，RpcEnv将使用RpcCallContext.sendFailure将异常发送回发送方，或者打印日志如果没有发送方或者不能序列化。
+ *
+ * RpcEnv还提供了一些方法来检索给定名称或uri的RpcEndpointRef。
+ *
+ * 具体的实现类：NettyRpcEnv
+ *
  * An RPC environment. [[RpcEndpoint]]s need to register itself with a name to [[RpcEnv]] to
  * receives messages. Then [[RpcEnv]] will process messages sent from [[RpcEndpointRef]] or remote
  * nodes, and deliver them to corresponding [[RpcEndpoint]]s. For uncaught exceptions caught by
@@ -70,6 +78,7 @@ private[spark] object RpcEnv {
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
+  // 通过uri检索RpcEndpointRef的超时时间
   private[spark] val defaultLookupTimeout = RpcUtils.lookupRpcTimeout(conf)
 
   /**
@@ -84,6 +93,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def address: RpcAddress
 
   /**
+   * 使用名称注册RpcEndpoint并返回其RpcEndpointRef。RpcEnv不保证线程安全。
    * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] does not
    * guarantee thread-safety.
    */
@@ -95,6 +105,8 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef]
 
   /**
+   * 检索由uri表示的RpcEndpointRef。这是一个阻塞的行为。
+   *
    * Retrieve the [[RpcEndpointRef]] represented by `uri`. This is a blocking action.
    */
   def setupEndpointRefByURI(uri: String): RpcEndpointRef = {
@@ -102,6 +114,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   }
 
   /**
+   * 转成uri后检索
    * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
    * This is a blocking action.
    */

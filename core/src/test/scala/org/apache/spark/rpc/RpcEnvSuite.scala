@@ -863,6 +863,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(shortTimeout.timeoutProp.r.findAllIn(reply4).length === 1)
   }
 
+  /**
+   * 下载文件
+   */
   test("file server") {
     withTempDir { tempDir =>
       withTempDir { destDir =>

@@ -31,6 +31,10 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.util.AbstractFileRegion;
 
 /**
+ * 包装的msg，包含两部分(header和body)
+ * header必须是ByteBuf，body可以是ByteBuf或者FileRegion
+ * MessageWithHeader实现了FileRegion，可以实现零拷贝
+ *
  * A wrapper message that holds two separate pieces (a header and a body).
  *
  * The header must be a ByteBuf, while the body can be a ByteBuf or a FileRegion.

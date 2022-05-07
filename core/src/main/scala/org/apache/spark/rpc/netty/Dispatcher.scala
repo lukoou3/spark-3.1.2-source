@@ -30,6 +30,7 @@ import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 
 /**
+ * 消息调度器，负责将RPC消息路由到适当的端点。
  * A message dispatcher, responsible for routing RPC messages to the appropriate endpoint(s).
  *
  * @param numUsableCores Number of CPU cores allocated to the process, for sizing the thread pool.
@@ -37,8 +38,10 @@ import org.apache.spark.rpc._
  */
 private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) extends Logging {
 
+  // RpcEnv中所有的endpoint, value是事件循环
   private val endpoints: ConcurrentMap[String, MessageLoop] =
     new ConcurrentHashMap[String, MessageLoop]
+  // RpcEnv中所有的endpointRef
   private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
     new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
@@ -68,6 +71,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       // called.
       endpointRefs.put(endpoint, endpointRef)
 
+      // 默认所有的endpoint共用sharedLoop事件循环
       var messageLoop: MessageLoop = null
       try {
         messageLoop = endpoint match {
@@ -113,6 +117,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   }
 
   /**
+   * 把这个消息发送到这个进程所有注册的RpcEndpoint
+   * 这个可以被用到使事件通知所有的end points，例如一个端点被连接了
+   *
    * Send a message to all registered [[RpcEndpoint]]s in this process.
    *
    * This can be used to make network events known to all end points (e.g. "a new node connected").
@@ -128,6 +135,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
       )}
   }
 
+  /**
+   * 提交一个客户端发的ask消息，会发送到收件箱
+   * endpoint在receiveAndReply方法中调用RpcCallContext.reply返回数据给客户端
+   */
   /** Posts a message sent by a remote endpoint. */
   def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
     val rpcCallContext =
@@ -144,6 +155,12 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     postMessage(message.receiver.name, rpcMessage, (e) => p.tryFailure(e))
   }
 
+  /**
+   * 提交一个客户端发的send消息，会发送到收件箱
+   * 搜索此方法发现有两处调用
+   *    NettyRpcHandler.receive: server接收到send消息
+   *    NettyRpcEnv.send: 客户端发送本地消息，endpointRef send message to a local RPC endpoint.
+   */
   /** Posts a one-way message. */
   def postOneWayMessage(message: RequestMessage): Unit = {
     postMessage(message.receiver.name, OneWayMessage(message.senderAddress, message.content),
@@ -158,6 +175,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   }
 
   /**
+   * 将消息提交到对应的endpoint。其实就是把message放到对应的收信箱中。
+   *
    * Posts a message to a specific endpoint.
    *
    * @param endpointName name of the endpoint.

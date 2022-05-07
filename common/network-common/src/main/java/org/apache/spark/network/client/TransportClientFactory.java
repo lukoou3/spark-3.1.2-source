@@ -58,6 +58,10 @@ import org.apache.spark.network.util.*;
  */
 public class TransportClientFactory implements Closeable {
 
+  /**
+   * client的连接池，使用数组储存，TransportClient本来就是线程安全的，使用这个估计是为了增加并发
+   * 初始化是仅仅是初始化了数据，真正用时才会创建连接，可以看看这个pool的实现逻辑，作为借鉴
+   */
   /** A simple data structure to track the pool of clients between two peer nodes. */
   private static class ClientPool {
     TransportClient[] clients;
@@ -157,13 +161,16 @@ public class TransportClientFactory implements Closeable {
     // Create the ClientPool if we don't have it yet.
     ClientPool clientPool = connectionPool.get(unresolvedAddress);
     if (clientPool == null) {
+      // 可以不存在是使用putIfAbsent方法，使用put有并发问题可能替换之前的value
       connectionPool.putIfAbsent(unresolvedAddress, new ClientPool(numConnectionsPerPeer));
       clientPool = connectionPool.get(unresolvedAddress);
     }
 
+    // 直接随机，没采用轮询
     int clientIndex = rand.nextInt(numConnectionsPerPeer);
     TransportClient cachedClient = clientPool.clients[clientIndex];
 
+    // 如果缓存的client还活跃就直接返回
     if (cachedClient != null && cachedClient.isActive()) {
       // Make sure that the channel will not timeout by updating the last use time of the
       // handler. Then check that the client is still alive, in case it timed out before
@@ -171,6 +178,7 @@ public class TransportClientFactory implements Closeable {
       TransportChannelHandler handler = cachedClient.getChannel().pipeline()
         .get(TransportChannelHandler.class);
       synchronized (handler) {
+        // 这里还考虑了超时，不愧是spark
         handler.getResponseHandler().updateTimeOfLastRequest();
       }
 
@@ -187,6 +195,7 @@ public class TransportClientFactory implements Closeable {
     final InetSocketAddress resolvedAddress = new InetSocketAddress(remoteHost, remotePort);
     final long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
     final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
+    // 这部分是干啥？仅仅测试连接？下面也没用到这些变量
     if (hostResolveTimeMs > 2000) {
       logger.warn("DNS resolution {} for {} took {} ms",
           resolvMsg, resolvedAddress, hostResolveTimeMs);
@@ -195,9 +204,11 @@ public class TransportClientFactory implements Closeable {
           resolvMsg, resolvedAddress, hostResolveTimeMs);
     }
 
+    // 加锁的对象元素是在clientPool.locks，不是clientPool.clients
     synchronized (clientPool.locks[clientIndex]) {
       cachedClient = clientPool.clients[clientIndex];
 
+      // 并发的考虑
       if (cachedClient != null) {
         if (cachedClient.isActive()) {
           logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
@@ -206,6 +217,8 @@ public class TransportClientFactory implements Closeable {
           logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
         }
       }
+
+      // 距离上次连接失败间隔较短
       // If this connection should fast fail when last connection failed in last fast fail time
       // window and it did, fail this connection directly.
       if (fastFail && System.currentTimeMillis() - clientPool.lastConnectionFailed <
@@ -214,7 +227,9 @@ public class TransportClientFactory implements Closeable {
           String.format("Connecting to %s failed in the last %s ms, fail this connection directly",
             resolvedAddress, fastFailTimeWindow));
       }
+
       try {
+        // 这个创建client连接
         clientPool.clients[clientIndex] = createClient(resolvedAddress);
         clientPool.lastConnectionFailed = 0;
       } catch (IOException e) {
@@ -279,6 +294,7 @@ public class TransportClientFactory implements Closeable {
 
     // Connect to the remote server
     long preConnect = System.nanoTime();
+    // 连接到服务端
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.await(conf.connectionTimeoutMs())) {
       throw new IOException(
@@ -295,9 +311,11 @@ public class TransportClientFactory implements Closeable {
     long preBootstrap = System.nanoTime();
     logger.debug("Connection to {} successful, running bootstraps...", address);
     try {
+      // 在这实现一些自定义的操作，比如增加安全认证
       for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
         clientBootstrap.doBootstrap(client, channel);
       }
+      // 也捕获非运行时异常，因为 bootstrap可能是scala实现的。doBootstrap方法上声明抛出RuntimeException
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
       logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
