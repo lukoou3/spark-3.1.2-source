@@ -578,6 +578,7 @@ abstract class UnaryExpression extends Expression {
 }
 
 /**
+ * 两个输入，一个输出。默认情况下，任何一个参数为null，则输出为null
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */

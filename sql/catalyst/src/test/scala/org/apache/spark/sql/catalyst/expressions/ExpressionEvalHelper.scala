@@ -38,6 +38,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
+ * 一些用于表达式评估测试的辅助函数。混合这种特性来使用它们。
+ * 注意：当您为表达式编写单元测试并调用checkEvaluation检查结果时，请确保您研究了所有可能导致空结果的情况（包括结构字段、数组元素和映射值中的空）。
+ * 框架将自动测试表达式的可空性标志。
+ *
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
  *
  * Note: when you write unit test for an expression and call `checkEvaluation` to check the result,
@@ -77,6 +81,15 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
+  }
+
+  // 我的测试
+  protected def myCheckEvaluationWithoutCodegen(
+    expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
+    val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
+    checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
   }
 
   protected def checkEvaluation(

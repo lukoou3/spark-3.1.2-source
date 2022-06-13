@@ -58,6 +58,13 @@ trait Logging {
   }
 
   protected def logDebug(msg: => String): Unit = {
+    if(logName.contains("org.apache.spark.sql.catalyst.expressions.codegen")){
+      println("*" * 60 + "start")
+      println(logName + ":")
+      println(msg)
+      println("*" * 60 + "end")
+      println()
+    }
     if (log.isDebugEnabled) log.debug(msg)
   }
 
@@ -79,7 +86,7 @@ trait Logging {
   }
 
   protected def logDebug(msg: => String, throwable: Throwable): Unit = {
-    if (log.isDebugEnabled) log.debug(msg, throwable)
+    if (log.isDebugEnabled || logName.contains("org.apache.spark.sql.catalyst.expressions.codegen")) log.debug(msg, throwable)
   }
 
   protected def logTrace(msg: => String, throwable: Throwable): Unit = {

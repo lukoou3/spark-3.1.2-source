@@ -33,6 +33,7 @@ class BaseOrdering extends Ordering[InternalRow] {
 }
 
 /**
+ * Struct类型的比较器
  * An interpreted row ordering comparator.
  */
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
@@ -42,7 +43,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
 
   override def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
-    val size = ordering.size
+    val size = ordering.size // ordering:每个属性的比较器
     while (i < size) {
       val order = ordering(i)
       val left = order.child.eval(a)

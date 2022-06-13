@@ -267,6 +267,56 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(mapFilter(mian, customFunc), null)
   }
 
+  // 校验绑定
+  private def myvalidateBinding(
+    e: Expression,
+    argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
+    case f: LambdaFunction =>
+      assert(f.arguments.size === argInfo.size)
+      f.arguments.zip(argInfo).foreach {
+        case (arg, (dataType, nullable)) =>
+          assert(arg.dataType === dataType)
+          assert(arg.nullable === nullable)
+      }
+      f
+  }
+
+  private def mycreateLambda(
+    dt: DataType,
+    nullable: Boolean,
+    f: Expression => Expression): Expression = {
+    val lv = NamedLambdaVariable("arg", dt, nullable)
+    val function = f(lv)
+    LambdaFunction(function, Seq(lv))
+  }
+
+  def myfilter(expr: Expression, f: Expression => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayFilter(expr, mycreateLambda(et, cn, f)).bind(myvalidateBinding)
+  }
+
+  test("myArrayFilter") {
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    /**
+     * 引入了隐士转换
+     * org.apache.spark.sql.catalyst.dsl
+     */
+    val isEven: Expression => Expression = x => x % 2 === 0
+    val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val indexIsEven: (Expression, Expression) => Expression = { case (_, idx) => idx % 2 === 0 }
+
+    myCheckEvaluationWithoutCodegen(filter(ai0, isEven), Seq(2))
+   /* myCheckEvaluationWithoutCodegen(filter(ai0, isNullOrOdd), Seq(1, 3))
+    myCheckEvaluationWithoutCodegen(filter(ai0, indexIsEven), Seq(1, 3))
+    myCheckEvaluationWithoutCodegen(filter(ai1, isEven), Seq.empty)
+    myCheckEvaluationWithoutCodegen(filter(ai1, isNullOrOdd), Seq(1, null, 3))
+    myCheckEvaluationWithoutCodegen(filter(ain, isEven), null)
+    myCheckEvaluationWithoutCodegen(filter(ain, isNullOrOdd), null)*/
+  }
+
   test("ArrayFilter") {
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))

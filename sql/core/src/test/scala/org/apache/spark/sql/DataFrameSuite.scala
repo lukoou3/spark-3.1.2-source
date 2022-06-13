@@ -25,19 +25,18 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
-
 import org.scalatest.matchers.should.Matchers._
-
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Expression, GenericInternalRow, LambdaFunction, NamedLambdaVariable, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SparkSqlParser, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
@@ -355,6 +354,74 @@ class DataFrameSuite extends QueryTest
     checkAnswer(
       df.select($"*", explode($"a").as("c")).sortWithinPartitions("b", "c"),
       Row(Seq("a"), 1, "a") :: Nil)
+  }
+
+  test("test_my_code") {
+    testData.selectExpr("key", "key + 1 sum").foreach{ row =>
+      println(row)
+    }
+  }
+
+  test("test_my_code2") {
+    val spark = SparkSession.builder()
+      .master("local[1]")
+      .appName("test")
+      .getOrCreate()
+
+    val datas = List(
+      (11, "莫南", 20, Seq(1,2,3)),
+      (21, "燕青丝", 19, Seq(2,2,3)),
+      (31, "沐璇音", 19, Seq(3,2,3)),
+      (41, "苏流沙", 20, Seq(4,2,3))
+    )
+
+    spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
+      //.selectExpr("code", "name", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
+      //.selectExpr( "filter(cnts, `x` -> `x` <= 2)").collect().foreach(println(_))
+      .selectExpr( "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
+
+    spark.stop()
+  }
+
+  test("test_my_code3") {
+    import org.apache.spark.sql.catalyst.expressions.EmptyRow
+    val parser = new SparkSqlParser()
+    val expression: Expression = parser.parseExpression("x -> x >= 3 and x <= 5")
+    println(expression.getClass)
+    println(expression)
+
+    val lambdaFunction:LambdaFunction = ResolveLambdaVariables.createLambda(expression, Seq((IntegerType, false)))
+
+    /**
+     * 不要解析未绑定的lambda函数。
+     * 如果我们看到这样一个lambda函数，这意味着要么高阶函数尚未解析，要么我们看到的是悬而未决的lambda函数。
+     */
+    //val expression1: Expression = ResolveLambdaVariables.resolve(expression, Map.empty)
+    val expression1: Expression = ResolveLambdaVariables.resolve(lambdaFunction, Map.empty)
+    println(expression1)
+    val value = lambdaFunction.arguments.head.asInstanceOf[NamedLambdaVariable]
+    value.value.set(1)
+    println(expression1.eval(EmptyRow))// new GenericInternalRow(Array[Any](1))
+    value.value.set(4)
+    println(expression1.eval(EmptyRow))
+  }
+
+  test("test_my_code4") {
+    val parser = new SparkSqlParser()
+    val expression: Expression = parser.parseExpression("x -> x.age + 10 + x.age * 2")
+    println(expression)
+
+    val lambdaFunction:LambdaFunction = ResolveLambdaVariables.createLambda(expression,
+      Seq((StructType(Seq(StructField("name", StringType), StructField("age", IntegerType))), false))
+    )
+    val expression1: Expression = ResolveLambdaVariables.resolve(lambdaFunction, Map.empty)
+    println(expression1)
+    val value = lambdaFunction.arguments.head.asInstanceOf[NamedLambdaVariable]
+    value.value.set(new GenericInternalRow(Array[Any]("a", 1)))
+    println(expression1.eval(EmptyRow))// new GenericInternalRow(Array[Any](1))
+    value.value.set(new GenericInternalRow(Array[Any]("a", 4)))
+    println(expression1.eval(EmptyRow))
+
   }
 
   test("selectExpr") {

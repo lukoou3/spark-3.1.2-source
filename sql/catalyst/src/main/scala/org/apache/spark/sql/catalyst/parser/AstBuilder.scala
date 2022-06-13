@@ -1719,14 +1719,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * 创建LambdaFunction
    * Create an [[LambdaFunction]].
    */
   override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
     val arguments = ctx.identifier().asScala.map { name =>
+      // A placeholder of lambda variables
       UnresolvedNamedLambdaVariable(UnresolvedAttribute.quoted(name.getText).nameParts)
     }
     val function = expression(ctx.expression).transformUp {
-      case a: UnresolvedAttribute => UnresolvedNamedLambdaVariable(a.nameParts)
+      case a: UnresolvedAttribute =>
+        // A placeholder of lambda variables
+        UnresolvedNamedLambdaVariable(a.nameParts)
     }
     LambdaFunction(function, arguments.toSeq)
   }

@@ -366,6 +366,7 @@ package object expressions  {
   }
 
   /**
+   * 当表达式继承此项时，意味着表达式是null过敏的（即，任何null输入都将导致null输出）。我们将在构造IsNotNull约束时使用此信息。
    * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
    * input will result in null output). We will use this information during constructing IsNotNull
    * constraints.

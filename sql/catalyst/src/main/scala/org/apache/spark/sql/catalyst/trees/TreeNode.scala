@@ -51,10 +51,16 @@ case class Origin(
   startPosition: Option[Int] = None)
 
 /**
+ *
+ * CurrentOrigin提供树节点的位置，以询问其起源的上下文。例如，当前正在分析哪一行代码。
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
  * line of code is currently being parsed.
  */
 object CurrentOrigin {
+  /**
+   * Origin 表示第几行第几列, 目前 CurrentOrigin 仅在 parser 中使用，在 visit 每个节点的时候都会使用，记录当前 parse 的节点是哪行哪列
+   * 从 value 是 ThreadLocal 类型可以看出，在 Spark SQL 中，parse sql 时都是在单独的 thread 里进行的（不同的 sql 不同的 thread）
+   */
   private val value = new ThreadLocal[Origin]() {
     override def initialValue: Origin = Origin()
   }
@@ -114,6 +120,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 返回该节点的 seq of children，children 是不可变的。
    * Returns a Seq of the children of this node.
    * Children should not change. Immutability required for containsChild optimization
    */
@@ -157,6 +164,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 找到满足f指定条件的第一个树节点。该条件递归应用于此节点及其所有子节点（先序遍历）
    * Find the first [[TreeNode]] that satisfies the condition specified by `f`.
    * The condition is recursively applied to this node and all of its children (pre-order).
    */
@@ -167,6 +175,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 将函数 f 递归应用于节点及其子节点
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */
@@ -176,6 +185,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 先应用于 child 再应用与 parent
    * Runs the given function recursively on [[children]] then on this node.
    * @param f the function to be applied to each node in the tree.
    */
@@ -185,6 +195,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 返回一个Seq，该Seq包含将给定函数应用于此树中的每个节点的结果，先序遍历。
    * Returns a Seq containing the result of applying the given function to each
    * node in this tree in a preorder traversal.
    * @param f the function to be applied.
@@ -217,6 +228,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 以 Seq 的形式返回 tree 的所有叶子节点
    * Returns a Seq containing the leaves in this tree.
    */
   def collectLeaves(): Seq[BaseType] = {
@@ -235,6 +247,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * TreeNode 没有实现 Product 相关方法，都由其子类自行实现
    * Efficient alternative to `productIterator.map(f).toArray`.
    */
   protected def mapProductIterator[B: ClassTag](f: Any => B): Array[B] = {
@@ -296,6 +309,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 返回此节点的副本，其中规则已递归应用于树。当规则不适用于给定节点时，它保持不变。
+   * 用户不应期望特定的方向性。如果需要特定的方向性，则应使用transformDown或transformUp。
    * Returns a copy of this node where `rule` has been recursively applied to the tree.
    * When `rule` does not apply to a given node it is left unchanged.
    * Users should not expect a specific directionality. If a specific directionality is needed,
@@ -308,6 +323,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 返回此节点的副本，其中规则已递归应用于该节点及其所有子节点（预排序）。
+   * 当规则不适用于给定节点时，它保持不变。
    * Returns a copy of this node where `rule` has been recursively applied to it and all of its
    * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
    *
@@ -315,9 +332,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRule = CurrentOrigin.withOrigin(origin) {
+      // 当规则不适用于给定节点时，它保持不变
       rule.applyOrElse(this, identity[BaseType])
     }
 
+    // 返回副本
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
       mapChildren(_.transformDown(rule))
@@ -329,6 +348,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 返回此节点的副本，其中规则首先递归应用于其所有子节点，然后递归应用于其自身（后序）。
+   * 当规则不适用于给定节点时，它保持不变。
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
    * unchanged.
@@ -363,7 +384,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * 返回此节点的副本，其中“f”已应用于“children”中的所有节点。
+   * 返回 f 应用于所有子节点（非递归，一般将递归操作放在调用该函数的地方）后该节点的 copy。
+   * 其内部的原理是调用 mapProductIterator，对每一个 productElement(i) 进行各种模式匹配，若能匹配上某个再根据一定规则进行转换，
+   *
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
+   *
    * @param f The transform function to be applied on applicable `TreeNode` elements.
    * @param forceCopy Whether to force making a copy of the nodes even if no child has been changed.
    */

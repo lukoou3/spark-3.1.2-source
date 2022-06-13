@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.AbstractDataType
 
 /**
+ * 期望输出输入类型
  * A trait that gets mixin to define the expected input types of an expression.
  *
  * This trait is typically used by operator expressions (e.g. [[Add]], [[Subtract]]) to define

@@ -97,9 +97,10 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
    * nothing. This function will produce a lambda function with hidden arguments when it is passed
    * an arbitrary expression.
    */
-  private def createLambda(
+  def createLambda(
       e: Expression,
       argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
+    // arguments全部resolved直接返回，UnresolvedNamedLambdaVariable的resolved为false，NamedLambdaVariable的resolved为true
     case f: LambdaFunction if f.bound => f
 
     case LambdaFunction(function, names, _) =>
@@ -122,6 +123,10 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
       LambdaFunction(function, arguments)
 
     case _ =>
+      /**
+       * 此表达式不使用lambda的任何参数（它是独立的）。
+       * 创建LambdaFunction用默认的参数，因为higher order function会传入参数
+       */
       // This expression does not consume any of the lambda's arguments (it is independent). We do
       // create a lambda function with default parameters because this is expected by the higher
       // order function. Note that we hide the lambda variables produced by this function in order
@@ -134,30 +139,37 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   }
 
   /**
+   * resolve lambda variables：UnresolvedNamedLambdaVariable => NamedLambdaVariable
    * Resolve lambda variables in the expression subtree, using the passed lambda variable registry.
    */
-  private def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
+  def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
     case _ if e.resolved => e
 
     case h: HigherOrderFunction if h.argumentsResolved && h.checkArgumentDataTypes().isSuccess =>
       h.bind(createLambda).mapChildren(resolve(_, parentLambdaMap))
 
     case l: LambdaFunction if !l.bound =>
+      // 不要解析未绑定的lambda函数。如果我们看到这样一个lambda函数，这意味着要么高阶函数尚未解析，要么我们看到的是悬而未决的lambda函数。
       // Do not resolve an unbound lambda function. If we see such a lambda function this means
       // that either the higher order function has yet to be resolved, or that we are seeing
       // dangling lambda function.
       l
 
     case l: LambdaFunction if !l.hidden =>
+      // LambdaFunction参数绑定的map
       val lambdaMap = l.arguments.map(v => canonicalizer(v.name) -> v).toMap
+      // 函数中的变量绑定，下一步就是处理下面的UnresolvedNamedLambdaVariable
       l.mapChildren(resolve(_, parentLambdaMap ++ lambdaMap))
 
     case u @ UnresolvedNamedLambdaVariable(name +: nestedFields) =>
       parentLambdaMap.get(canonicalizer(name)) match {
         case Some(lambda) =>
-          nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
+          // 嵌套参数的处理，可以先忽略
+          val r = nestedFields.foldLeft(lambda: Expression) { (expr, fieldName) =>
             ExtractValue(expr, Literal(fieldName), conf.resolver)
           }
+          // 默认是lambda
+          r
         case None =>
           UnresolvedAttribute(u.nameParts)
       }

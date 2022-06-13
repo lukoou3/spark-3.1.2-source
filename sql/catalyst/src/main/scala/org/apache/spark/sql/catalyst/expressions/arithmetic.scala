@@ -163,16 +163,19 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
+  // 代码生成函数使用
   protected val failOnError: Boolean
 
   override def dataType: DataType = left.dataType
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
 
+  // 代码生成函数使用
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
     sys.error("BinaryArithmetics must override either decimalMethod or genCode")
 
+  // 代码生成函数使用
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
@@ -182,7 +185,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
   def exactMathMethod: Option[String] = None
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+  dataType match {
     case _: DecimalType =>
       // Overflow is handled in the CheckOverflow operator
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
@@ -210,6 +214,9 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
          """.stripMargin
       })
     case IntegerType | LongType =>
+      if(true){
+        //throw new Exception("test")
+      }
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val operation = if (failOnError && exactMathMethod.isDefined) {
           val mathClass = classOf[Math].getName
@@ -249,6 +256,7 @@ case class Add(
     left: Expression,
     right: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends BinaryArithmetic {
+  val test_value = 1
 
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 

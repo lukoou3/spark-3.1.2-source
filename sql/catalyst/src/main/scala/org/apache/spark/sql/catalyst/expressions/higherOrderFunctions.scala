@@ -45,6 +45,8 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException(this, "newInstance")
+
+  // LeafExpression的children是Nil，这个resolved固定是false
   override lazy val resolved = false
 
   override def toString: String = s"lambda '$name"
@@ -74,6 +76,7 @@ case class NamedLambdaVariable(
   extends LeafExpression
   with NamedExpression
   with CodegenFallback {
+  val test_field = 1
 
   override def qualifier: Seq[String] = Seq.empty
 
@@ -94,6 +97,7 @@ case class NamedLambdaVariable(
 }
 
 /**
+ * 数组高阶函数的Lambda函数
  * A lambda function and its arguments. A lambda function can be hidden when a user wants to
  * process an completely independent expression in a [[HigherOrderFunction]], the lambda function
  * and its variables are then only used for internal bookkeeping within the higher order function.
@@ -108,9 +112,14 @@ case class LambdaFunction(
   override def dataType: DataType = function.dataType
   override def nullable: Boolean = function.nullable
 
-  lazy val bound: Boolean = arguments.forall(_.resolved)
+  // 改成块, debuger
+  lazy val bound: Boolean = {
+    arguments.forall(_.resolved)
+  }
 
-  override def eval(input: InternalRow): Any = function.eval(input)
+  override def eval(input: InternalRow): Any = {
+    function.eval(input)
+  }
 }
 
 object LambdaFunction {
@@ -170,12 +179,16 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   }
 
   /**
+   * 把lambda functions绑定到HigherOrderFunction用传入的f函数。
+   * Seq[(DataType, Boolean)]：参数类型信息
    * Bind the lambda functions to the [[HigherOrderFunction]] using the given bind function. The
    * bind function takes the potential lambda and it's (partial) arguments and converts this into
    * a bound lambda function.
    */
   def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction
 
+  // LambdaFunction中的function
+  // 确保lambda变量引用的实例与参数的实例相同，以防在序列化过程中或出于某种原因，中的变量被单独实例化。
   // Make sure the lambda variables refer the same instances as of arguments for case that the
   // variables in instantiated separately during serialization or for some reason.
   @transient lazy val functionsForEval: Seq[Expression] = functions.map {
@@ -474,7 +487,7 @@ case class MapFilter(
   """)
 case class ArrayFilter(
     argument: Expression,
-    function: Expression)
+    function: Expression) // functions: function::Nil
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
   override def dataType: DataType = argument.dataType
@@ -485,6 +498,7 @@ case class ArrayFilter(
     val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
+        // 替换function，createLambda
         copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
       case _ =>
         copy(function = f(function, (elementType, containsNull) :: Nil))
