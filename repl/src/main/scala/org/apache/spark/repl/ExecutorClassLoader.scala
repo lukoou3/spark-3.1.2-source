@@ -34,6 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.ParentClassLoader
 
 /**
+ * 类加载设置
  * A ClassLoader that reads classes from a Hadoop FileSystem or Spark RPC endpoint, used to load
  * classes defined by the interpreter when the REPL is used. Allows the user to specify if user
  * class path should be first.

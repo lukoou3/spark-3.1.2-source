@@ -58,6 +58,11 @@ private[spark] class JavaSerializationStream(
   def close(): Unit = { objOut.close() }
 }
 
+/**
+ * 类加载设置
+ * @param in
+ * @param loader
+ */
 private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoader)
   extends DeserializationStream {
 

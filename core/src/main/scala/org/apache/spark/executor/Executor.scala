@@ -907,6 +907,7 @@ private[spark] class Executor(
   }
 
   /**
+   * spark.repl.class.uri
    * If the REPL is in use, add another ClassLoader that will read
    * new classes defined by the REPL as the user types code
    */

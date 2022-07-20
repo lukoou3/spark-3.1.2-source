@@ -459,6 +459,8 @@ case class NewInstance(
     propagateNull: Boolean,
     dataType: DataType,
     outerPointer: Option[() => AnyRef]) extends InvokeLike {
+  println(arguments)
+
   private val className = cls.getName
 
   override def nullable: Boolean = needNullCheck

@@ -124,6 +124,7 @@ class ExecutorClassLoaderSuite
   }
 
   test("child first") {
+    // 类加载设置
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
     val fakeClass = classLoader.loadClass("ReplFakeClass2").getConstructor().newInstance()
