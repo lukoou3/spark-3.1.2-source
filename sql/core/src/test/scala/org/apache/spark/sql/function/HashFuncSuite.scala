@@ -56,11 +56,17 @@ class HashFuncSuite extends AnyFunSuite{
     val df = spark.createDataFrame(datas).toDF("name", "age")
 
     /**
+     * JavaTypeInference.deserializerFor(beanClass):java类的反序列化
+     *    catalyst.expressions.objects.NewInstance：cls(Nil,调用的无参的构造函数),arguments(),dataType
+     *    InitializeJavaBean(newInstance, setters)： 设置属性
+     * ScalaReflection.deserializerForType(tpe):scala类型的反射, Product类型调用的带参数的构造器
+     *
+     *
      * [[org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean]]
      * [[org.apache.spark.sql.catalyst.expressions.objects.NewInstance]]
      */
     //df.as[People]
-    //df.as[People2](ExpressionEncoder[People2]())
+    df.as[People2](ExpressionEncoder[People2]())
     //df.as[People3](ExpressionEncoder[People3]()).foreach{ data =>
     df.as[People3](ExpressionEncoder.javaBean(classOf[People3])).foreach{ data =>
       println(data)

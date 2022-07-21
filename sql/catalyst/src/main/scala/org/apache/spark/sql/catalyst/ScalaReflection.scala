@@ -342,6 +342,7 @@ object ScalaReflection extends ScalaReflection {
           dataType = ObjectType(udt.getClass))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
+      // Option或者Product
       case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
 
@@ -552,6 +553,7 @@ object ScalaReflection extends ScalaReflection {
         val udtClass = udt.getClass
         createSerializerForUserDefinedType(inputObject, udt, udtClass)
 
+      // Option或者Product
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
           throw new UnsupportedOperationException(
@@ -805,6 +807,7 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
+   * Option或者Product
    * Whether the fields of the given type is defined entirely by its constructor parameters.
    */
   def definedByConstructorParams(tpe: Type): Boolean = cleanUpReflectionObjects {
