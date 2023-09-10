@@ -222,6 +222,32 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  /**
+   * 测试UnsafeProjection和UnsafeRowWriter和UnsafeRow
+   */
+  test("test generated unsafe projection2") {
+    val schema = new StructType(Array(
+      StructField("a", StringType, true),
+      StructField("b", IntegerType, true)
+    ))
+    val row = Row("a", 1)
+    val lit = Literal.create(row, schema)
+    val internalRow = lit.value.asInstanceOf[InternalRow]
+
+    val unsafeProj = UnsafeProjection.create(schema)
+    val unsafeRow: UnsafeRow = unsafeProj(internalRow)
+    assert(unsafeRow.getUTF8String(0) === UTF8String.fromString("a"))
+    assert(unsafeRow.getInt(1) === 1)
+
+    /*val fromUnsafe = SafeProjection.create(schema)
+    val internalRow2 = fromUnsafe(unsafeRow)
+    assert(internalRow === internalRow2)
+
+    // update unsafeRow should not affect internalRow2
+    unsafeRow.setInt(1, 10)
+    assert(internalRow === internalRow2)*/
+  }
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),

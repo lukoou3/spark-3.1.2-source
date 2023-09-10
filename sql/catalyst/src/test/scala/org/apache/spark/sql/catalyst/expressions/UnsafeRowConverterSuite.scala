@@ -19,14 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, _}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -35,6 +34,51 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers with PlanTestB
     with ExpressionEvalHelper {
 
   private def roundedSize(size: Int) = ByteArrayMethods.roundNumberOfBytesToNearestWord(size)
+
+  /**
+   * 测试UnsafeRow
+   */
+  test("testUnsafeRow"){
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      val factory = UnsafeProjection
+      val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType)
+      val converter = factory.create(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes)
+      row.setLong(0, 0)
+      row.setLong(1, 1)
+      row.setInt(2, 2)
+
+      val unsafeRow: UnsafeRow = converter.apply(row)
+      assert(unsafeRow.getSizeInBytes === 8 + (3 * 8))
+      assert(unsafeRow.getLong(0) === 0)
+      assert(unsafeRow.getLong(1) === 1)
+      assert(unsafeRow.getInt(2) === 2)
+    }
+  }
+
+  /**
+   * 测试UnsafeRow
+   * 数组写有点复杂，可以看代码生成的逻辑，和写str类似，都会扩容
+   *     mutableStateArray_0[0] = new UnsafeRowWriter(4, 32);
+         mutableStateArray_1[0] = new UnsafeArrayWriter(mutableStateArray_0[0], 4);
+   */
+  test("testUnsafeRow2"){
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      val factory = UnsafeProjection
+      val fieldTypes: Array[DataType] = Array(LongType, LongType, IntegerType, ArrayType(IntegerType))
+      val converter = factory.create(fieldTypes)
+      val row = new SpecificInternalRow(fieldTypes)
+      row.setLong(0, 0)
+      row.setLong(1, 1)
+      row.setInt(2, 2)
+
+      val unsafeRow: UnsafeRow = converter.apply(row)
+      assert(unsafeRow.getSizeInBytes === 8 + (4 * 8))
+      assert(unsafeRow.getLong(0) === 0)
+      assert(unsafeRow.getLong(1) === 1)
+      assert(unsafeRow.getInt(2) === 2)
+    }
+  }
 
   testBothCodegenAndInterpreted("basic conversion with only primitive types") {
     val factory = UnsafeProjection

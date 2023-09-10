@@ -68,6 +68,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   //////////////////////////////////////////////////////////////////////////////
 
   public static int calculateBitSetWidthInBytes(int numFields) {
+    // 每个byte可以存8个, 8个字节存64个字段
     return ((numFields + 63)/ 64) * 8;
   }
 

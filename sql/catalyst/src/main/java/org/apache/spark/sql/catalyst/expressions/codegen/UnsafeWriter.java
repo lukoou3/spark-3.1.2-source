@@ -80,8 +80,8 @@ public abstract class UnsafeWriter {
   }
 
   protected void setOffsetAndSize(int ordinal, int currentCursor, int size) {
-    final long relativeOffset = currentCursor - startingOffset;
-    final long offsetAndSize = (relativeOffset << 32) | (long)size;
+    final long relativeOffset = currentCursor - startingOffset; // 这个字段value的相对位置
+    final long offsetAndSize = (relativeOffset << 32) | (long)size; // 位置和value大小
 
     write(ordinal, offsetAndSize);
   }
@@ -123,12 +123,13 @@ public abstract class UnsafeWriter {
       Object baseObject,
       long baseOffset,
       int numBytes) {
+    // 对齐后需要多少字节
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
     grow(roundedSize);
-    zeroOutPaddingBytes(numBytes);
+    zeroOutPaddingBytes(numBytes); // % 8 != 0 时需要对齐
     Platform.copyMemory(baseObject, baseOffset, getBuffer(), cursor(), numBytes);
     setOffsetAndSize(ordinal, numBytes);
-    increaseCursor(roundedSize);
+    increaseCursor(roundedSize); // 移动指针
   }
 
   public final void write(int ordinal, CalendarInterval input) {

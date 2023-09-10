@@ -36,6 +36,7 @@ public class ByteArrayMethods {
   }
 
   public static long roundNumberOfBytesToNearestWord(long numBytes) {
+    // 这相当于`numBytes % 8`
     long remainder = numBytes & 0x07;  // This is equivalent to `numBytes % 8`
     if (remainder == 0) {
       return numBytes;

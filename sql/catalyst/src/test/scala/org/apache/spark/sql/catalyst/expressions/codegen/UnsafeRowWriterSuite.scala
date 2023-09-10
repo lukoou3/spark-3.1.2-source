@@ -17,14 +17,69 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.nio.ByteBuffer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
   def checkDecimalSizeInBytes(decimal: Decimal, numBytes: Int): Unit = {
     assert(decimal.toJavaBigDecimal.unscaledValue().toByteArray.length == numBytes)
+  }
+
+  test("ByteBuffer"){
+    /**
+     * ByteBuffer默认是BIG_ENDIAN
+     * 可以用ByteBuffer仿照UnsafeRowWriter和UnsafeRow实现UnsafeRow，在flink大数据量时会优化很多gc
+     */
+    val b = 20.asInstanceOf[Byte]
+    val buffer = ByteBuffer.allocateDirect(256)
+    buffer.put(b)
+    buffer.putInt(10)
+    buffer.putInt(20)
+    buffer.put(b)
+    println(buffer.getInt())
+  }
+
+  /**
+   * 我看底层用的是小端
+   */
+  test("testUnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(4)
+    rowWriter.resetRowWriter()
+    rowWriter.write(0, 10) // int
+    rowWriter.write(1, UTF8String.fromString("Hello spark")) // str
+    rowWriter.write(2, UTF8String.fromString("Hello flink")) // str
+    rowWriter.write(3, 3333333555555555L) // long
+    val row = rowWriter.getRow()
+    var i = 0
+    while (i < 4){
+      println(i + " is null:" + row.isNullAt(i))
+      i+=1
+    }
+    assert(row.getInt(0) == 10)
+    assert(row.getString(1) == "Hello spark")
+    assert(row.getString(2) == "Hello flink")
+    assert(row.getLong(3) == 3333333555555555L)
+
+    println("-" * 40)
+    // 像这种str字段依赖cursor的不能多次写，否则浪费内存
+
+    rowWriter.reset()
+    rowWriter.setNullAt(0) // int
+    rowWriter.write(1, UTF8String.fromString("Hello spark")) // str
+    rowWriter.setNullAt(2) // str
+    rowWriter.write(3, 3333333555555555L) // long
+    i = 0
+    while (i < 4){
+      println(i + " is null:" + row.isNullAt(i))
+      i+=1
+    }
+    println(row.getInt(0))
+    println(row.getUTF8String(1))
+    println(row.getUTF8String(2))
+    println(row.getLong(3))
   }
 
   test("SPARK-25538: zero-out all bits for decimals") {
