@@ -33,6 +33,8 @@ import org.apache.spark.sql.types._
 
 
 /**
+ * 强制类型转换识别
+ *
  * A collection of [[Rule]] that can be used to coerce differing types that participate in
  * operations into compatible ones.
  *

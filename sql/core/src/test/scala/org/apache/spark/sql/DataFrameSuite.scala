@@ -22,17 +22,20 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.ResolveLambdaVariables
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
+import org.apache.spark.sql.catalyst.analysis.{ResolveLambdaVariables, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.findTightestCommonType
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{EmptyRow, Expression, GenericInternalRow, LambdaFunction, NamedLambdaVariable, Uuid}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.{BinaryOperator, BoundReference, Cast, EmptyRow, ExpectsInputTypes, Expression, GenericInternalRow, ImplicitCastInputTypes, LambdaFunction, Literal, NamedLambdaVariable, UnsafeRow, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -378,7 +381,7 @@ class DataFrameSuite extends QueryTest
     spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
       //.selectExpr("code", "name", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
       //.selectExpr( "filter(cnts, `x` -> `x` <= 2)").collect().foreach(println(_))
-      .selectExpr( "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
+      .selectExpr("age + 1L + 1", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
 
     spark.stop()
   }
@@ -421,7 +424,200 @@ class DataFrameSuite extends QueryTest
     println(expression1.eval(EmptyRow))// new GenericInternalRow(Array[Any](1))
     value.value.set(new GenericInternalRow(Array[Any]("a", 4)))
     println(expression1.eval(EmptyRow))
+  }
 
+  test("test_my_code5") {
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val expression: Expression = parser.parseExpression("x -> x.age + 10 + x.age * 2")
+    //println(expression, expression.dataType)
+    println(expression)
+
+    val lambdaFunction:LambdaFunction = ResolveLambdaVariables.createLambda(expression,
+      Seq((StructType(Seq(StructField("name", StringType), StructField("age", IntegerType))), false))
+    )
+    val expression1: Expression = ResolveLambdaVariables.resolve(lambdaFunction, Map.empty)
+    println(expression1, expression1.dataType)
+    val value = lambdaFunction.arguments.head.asInstanceOf[NamedLambdaVariable]
+    value.value.set(new GenericInternalRow(Array[Any]("a", 1)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)// new GenericInternalRow(Array[Any](1))
+    value.value.set(new GenericInternalRow(Array[Any]("a", 4)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)
+  }
+
+  test("test_my_code52") {
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val expression: Expression = parser.parseExpression("x -> x.age + 10 + x.age * 2")
+    //println(expression, expression.dataType)
+    println(expression)
+
+    val lambdaFunction:LambdaFunction = ResolveLambdaVariables.createLambda(expression,
+      Seq((StructType(Seq(StructField("name", StringType), StructField("age", LongType))), false))
+    )
+    val expression1: Expression = ResolveLambdaVariables.resolve(lambdaFunction, Map.empty)
+    println(expression1, expression1.dataType)
+    val value = lambdaFunction.arguments.head.asInstanceOf[NamedLambdaVariable]
+    value.value.set(new GenericInternalRow(Array[Any]("a", 1)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)// new GenericInternalRow(Array[Any](1))
+    value.value.set(new GenericInternalRow(Array[Any]("a", 4)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)
+  }
+
+  test("test_my_code6") {
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val expression: Expression = parser.parseExpression("x -> cast(x.age + 10 + x.age * 2 as string)")
+    //println(expression, expression.dataType)
+    println(expression)
+
+    val lambdaFunction:LambdaFunction = ResolveLambdaVariables.createLambda(expression,
+      Seq((StructType(Seq(StructField("name", StringType), StructField("age", IntegerType))), false))
+    )
+    val expression1: Expression = ResolveLambdaVariables.resolve(lambdaFunction, Map.empty)
+    println(expression1, expression1.dataType)
+    val value = lambdaFunction.arguments.head.asInstanceOf[NamedLambdaVariable]
+    value.value.set(new GenericInternalRow(Array[Any]("a", 1)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)// new GenericInternalRow(Array[Any](1))
+    value.value.set(new GenericInternalRow(Array[Any]("a", 4)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)
+  }
+
+  test("test_my_code7") {
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val expression: Expression = parser.parseExpression("x -> x.age = 10 ")
+    //println(expression, expression.dataType)
+    println(expression)
+
+    val lambdaFunction:LambdaFunction = ResolveLambdaVariables.createLambda(expression,
+      Seq((StructType(Seq(StructField("name", StringType), StructField("age", IntegerType))), false))
+    )
+    val expression1: Expression = ResolveLambdaVariables.resolve(lambdaFunction, Map.empty)
+    println(expression1, expression1.dataType)
+    val value = lambdaFunction.arguments.head.asInstanceOf[NamedLambdaVariable]
+    value.value.set(new GenericInternalRow(Array[Any]("a", 1)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)// new GenericInternalRow(Array[Any](1))
+    value.value.set(new GenericInternalRow(Array[Any]("a", 4)))
+    println(expression1.eval(EmptyRow), expression1.eval(EmptyRow).getClass)
+  }
+
+  test("test_BoundReference") {
+    import org.apache.spark.sql.catalyst.expressions._
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val expression1: Expression = Add(BoundReference(0, IntegerType, true), Literal(5, IntegerType))
+    println(expression1, expression1.dataType)
+    val row = new GenericInternalRow(Array[Any](10))
+    println(expression1.eval(row), expression1.eval(row).getClass)//
+    println(expression1.eval(row), expression1.eval(row).getClass)
+  }
+
+  test("test_BoundReference2") {
+    import org.apache.spark.sql.catalyst.expressions._
+    val expression1: Expression = Add(BoundReference(0, IntegerType, true), Literal(5, IntegerType))
+    println(expression1, expression1.dataType)
+    val row = new GenericInternalRow(Array[Any](10))
+    val projection = GenerateUnsafeProjection.generate(
+      Seq(expression1), subexpressionEliminationEnabled = true)
+    // should not throw exception
+    val row1: UnsafeRow = projection(row)
+    println(row1)
+    println(row1.getInt(0))
+  }
+
+  /**
+   * 这样岂不是可以把spark这部分单独提取出来，搞个求值表达式引擎，性能也高
+   */
+  test("test_BoundReference4"){
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val map = Map("age1" -> BoundReference(0, IntegerType, true), "age2" -> BoundReference(1, LongType, true))
+    //var expression: Expression = parser.parseExpression("age1 + age2 + 3")
+    var expression: Expression = parser.parseExpression("age1 + age2 + 3")
+    expression = expression.transform {
+      case a: Expression =>{
+        println(a, a.getClass)
+        a
+      }
+    }
+    println("*" * 40)
+    expression = expression.transform {
+      case a: UnresolvedAttribute =>{
+        map(a.name)
+      }
+    }
+    expression = convert(expression)
+    println("*" * 40)
+    expression = expression.transform {
+      case a: Expression =>{
+        println(a, a.getClass)
+        a
+      }
+    }
+    println("*" * 40)
+    println(expression, expression.dataType)
+    val row = new GenericInternalRow(Array[Any](10, 20L))
+    val projection = GenerateUnsafeProjection.generate(
+      Seq(expression), subexpressionEliminationEnabled = true)
+    // should not throw exception
+    val row1: UnsafeRow = projection(row)
+    println(row1)
+    println(row1.getLong(0))
+  }
+
+  // 实际上sql的强制类型转换在TypeCoercion，作为一种规则应用
+  def convert(e: Expression) = {
+    e.transform{
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case b @ BinaryOperator(left, right)
+        if canHandleTypeCoercion(left.dataType, right.dataType) =>
+        findTightestCommonType(left.dataType, right.dataType).map { commonType =>
+          if (b.inputType.acceptsType(commonType)) {
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          } else {
+            // Otherwise, don't do anything with the expression.
+            b
+          }
+        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
+
+      case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          // If we cannot do the implicit cast, just use the original input.
+          implicitCast(in, expected).getOrElse(in)
+        }
+        e.withNewChildren(children)
+
+      case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
+        // Convert NullType into some specific target type for ExpectsInputTypes that don't do
+        // general implicit casting.
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+          if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+            Literal.create(null, expected.defaultConcreteType)
+          } else {
+            in
+          }
+        }
+        e.withNewChildren(children)
+    }
+  }
+
+  private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
+    (leftType, rightType) match {
+      case (_: DecimalType, NullType) => true
+      case (NullType, _: DecimalType) => true
+      case _ =>
+        // If DecimalType operands are involved except for the two cases above,
+        // DecimalPrecision will handle it.
+        !leftType.isInstanceOf[DecimalType] && !rightType.isInstanceOf[DecimalType] &&
+                leftType != rightType
+    }
   }
 
   test("selectExpr") {
