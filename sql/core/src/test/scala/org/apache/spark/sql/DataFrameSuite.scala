@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 import org.scalatest.matchers.should.Matchers._
@@ -30,10 +31,11 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
 import org.apache.spark.sql.catalyst.analysis.{ResolveLambdaVariables, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.findTightestCommonType
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{findTightestCommonType}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Kurtosis, Skewness, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.{BinaryOperator, BoundReference, Cast, EmptyRow, ExpectsInputTypes, Expression, GenericInternalRow, ImplicitCastInputTypes, LambdaFunction, Literal, NamedLambdaVariable, UnsafeRow, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Abs, BinaryArithmetic, BinaryComparison, BinaryOperator, BoundReference, Cast, EmptyRow, Equality, ExpectsInputTypes, Expression, GenericInternalRow, ImplicitCastInputTypes, LambdaFunction, Literal, NamedLambdaVariable, UnaryMinus, UnaryPositive, UnsafeRow, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
@@ -567,6 +569,45 @@ class DataFrameSuite extends QueryTest
     println(row1.getLong(0))
   }
 
+  test("test_BoundReference5"){
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val map = Map("age1" -> BoundReference(0, IntegerType, true), "age2" -> BoundReference(1, LongType, true))
+    //var expression: Expression = parser.parseExpression("age1 + age2 + 3")
+    var expression: Expression = parser.parseExpression("age1 + age2 + '3'")
+    expression = expression.transform {
+      case a: Expression =>{
+        println(a, a.getClass)
+        a
+      }
+    }
+    println("*" * 40)
+    expression = expression.transform {
+      case a: UnresolvedAttribute =>{
+        map(a.name)
+      }
+    }
+    expression = convert(expression)
+    expression = convertStr(expression)
+    println("*" * 40)
+    expression = expression.transform {
+      case a: Expression =>{
+        println(a, a.getClass, a.dataType)
+        a
+      }
+    }
+    println("*" * 40)
+    println(expression, expression.dataType, expression)
+    val row = new GenericInternalRow(Array[Any](10, 20L))
+    val projection = GenerateUnsafeProjection.generate(
+      Seq(expression), subexpressionEliminationEnabled = true)
+    // should not throw exception
+    val row1: UnsafeRow = projection(row)
+    println(row1)
+    println(row1.getLong(0))
+  }
+
   // 实际上sql的强制类型转换在TypeCoercion，作为一种规则应用
   def convert(e: Expression) = {
     e.transform{
@@ -608,6 +649,57 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  def convertStr(e: Expression) = {
+    def castExpr(expr: Expression, targetType: DataType): Expression = {
+      (expr.dataType, targetType) match {
+        case (NullType, dt) => Literal.create(null, targetType)
+        case (l, dt) if (l != dt) => Cast(expr, targetType)
+        case _ => expr
+      }
+    }
+    e.transform{
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case a @ BinaryArithmetic(left @ StringType(), right)
+        if right.dataType != CalendarIntervalType =>
+        a.makeCopy(Array(Cast(left, DoubleType), right))
+      case a @ BinaryArithmetic(left, right @ StringType())
+        if left.dataType != CalendarIntervalType =>
+        a.makeCopy(Array(left, Cast(right, DoubleType)))
+
+      // For equality between string and timestamp we cast the string to a timestamp
+      // so that things like rounding of subsecond precision does not affect the comparison.
+      case p @ Equality(left @ StringType(), right @ TimestampType()) =>
+        p.makeCopy(Array(Cast(left, TimestampType), right))
+      case p @ Equality(left @ TimestampType(), right @ StringType()) =>
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
+
+      case p @ BinaryComparison(left, right)
+        if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
+        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
+
+      case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
+      case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
+      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case s @ StddevPop(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ StddevSamp(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
+      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
+      case v @ VariancePop(e @ StringType(), _) =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case v @ VarianceSamp(e @ StringType(), _) =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ Skewness(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case k @ Kurtosis(e @ StringType(), _) =>
+        k.withNewChildren(Seq(Cast(e, DoubleType)))
+    }
+  }
+
   private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
     (leftType, rightType) match {
       case (_: DecimalType, NullType) => true
@@ -618,6 +710,35 @@ class DataFrameSuite extends QueryTest
         !leftType.isInstanceOf[DecimalType] && !rightType.isInstanceOf[DecimalType] &&
                 leftType != rightType
     }
+  }
+
+  def findCommonTypeForBinaryComparison(
+                                                 dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
+    case (StringType, DateType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (DateType, StringType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (StringType, TimestampType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    case (TimestampType, StringType)
+    => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
+    case (StringType, NullType) => Some(StringType)
+    case (NullType, StringType) => Some(StringType)
+
+    // Cast to TimestampType when we compare DateType with TimestampType
+    // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
+
+    // There is no proper decimal type we can pick,
+    // using double type is the best we can do.
+    // See SPARK-22469 for details.
+    case (n: DecimalType, s: StringType) => Some(DoubleType)
+    case (s: StringType, n: DecimalType) => Some(DoubleType)
+
+    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
+    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+    case (l, r) => None
   }
 
   test("selectExpr") {
