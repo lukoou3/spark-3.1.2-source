@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 import org.scalatest.matchers.should.Matchers._
@@ -30,8 +29,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
-import org.apache.spark.sql.catalyst.analysis.{ResolveLambdaVariables, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{findTightestCommonType}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, ResolveLambdaVariables, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.findTightestCommonType
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Kurtosis, Skewness, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -383,7 +382,7 @@ class DataFrameSuite extends QueryTest
     spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
       //.selectExpr("code", "name", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
       //.selectExpr( "filter(cnts, `x` -> `x` <= 2)").collect().foreach(println(_))
-      .selectExpr("age + 1L + 1", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
+      .selectExpr("age + 1L + '3'").collect().foreach(println(_))
 
     spark.stop()
   }
@@ -588,8 +587,26 @@ class DataFrameSuite extends QueryTest
         map(a.name)
       }
     }
-    expression = convert(expression)
-    expression = convertStr(expression)
+    //expression = convert(expression)
+    //expression = expression.mapChildren(x => convert(x))
+    //expression = convert(expression)
+    var continue = true
+    while (continue) {
+      var curExp = convert(expression)
+      curExp = convertStr(curExp)
+      if (curExp.fastEquals(expression)) {
+        continue = false
+      }
+      expression = curExp
+    }
+
+    /*expression = expression.transform {
+      case a: Expression =>{
+        println(a, a.getClass, a.dataType)
+        a
+      }
+    }*/
+
     println("*" * 40)
     expression = expression.transform {
       case a: Expression =>{
@@ -598,19 +615,66 @@ class DataFrameSuite extends QueryTest
       }
     }
     println("*" * 40)
-    println(expression, expression.dataType, expression)
+    println(expression, expression.dataType)
     val row = new GenericInternalRow(Array[Any](10, 20L))
     val projection = GenerateUnsafeProjection.generate(
       Seq(expression), subexpressionEliminationEnabled = true)
     // should not throw exception
     val row1: UnsafeRow = projection(row)
     println(row1)
-    println(row1.getLong(0))
+    println(row1.getDouble(0))
+  }
+
+  test("test_BoundReference6"){
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    //val parser = new SparkSqlParser()
+    val parser = CatalystSqlParser
+    val map = Map("age1" -> BoundReference(0, IntegerType, true), "age2" -> BoundReference(1, LongType, true))
+    //var expression: Expression = parser.parseExpression("age1 + age2 + 3")
+    var expression: Expression = parser.parseExpression("if(age1 > age2, age1 + age2 + '30', age1 + age2 + '3')")
+    println("*" * 40)
+    expression = expression.transform {
+      case a: UnresolvedAttribute =>{
+        map(a.name)
+      }
+      case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) => {
+        FunctionRegistry.builtin.lookupFunction(funcId, arguments)
+      }
+    }
+
+    var continue = true
+    while (continue) {
+      var curExp = convert(expression)
+      curExp = convertStr(curExp)
+      if (curExp.fastEquals(expression)) {
+        continue = false
+      }
+      expression = curExp
+    }
+
+    println("*" * 40)
+    expression = expression.transform {
+      case a: Expression =>{
+        println(a, a.getClass, a.dataType)
+        a
+      }
+    }
+
+
+    println("*" * 40)
+    println(expression, expression.dataType)
+    val row = new GenericInternalRow(Array[Any](10, 20L))
+    val projection = GenerateUnsafeProjection.generate(
+      Seq(expression), subexpressionEliminationEnabled = true)
+    // should not throw exception
+    val row1: UnsafeRow = projection(row)
+    println(row1)
+    println(row1.getDouble(0))
   }
 
   // 实际上sql的强制类型转换在TypeCoercion，作为一种规则应用
   def convert(e: Expression) = {
-    e.transform{
+    e.transformDown{
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -646,6 +710,9 @@ class DataFrameSuite extends QueryTest
           }
         }
         e.withNewChildren(children)
+
+      case e:Expression =>
+            e
     }
   }
 
@@ -657,7 +724,7 @@ class DataFrameSuite extends QueryTest
         case _ => expr
       }
     }
-    e.transform{
+    e.transformDown{
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 

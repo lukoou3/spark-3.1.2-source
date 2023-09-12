@@ -202,12 +202,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       throw new TreeNodeException(plan, message, null)
     }
 
+    // 应用所有rule batches
     batches.foreach { batch =>
       val batchStartPlan = curPlan
       var iteration = 1
       var lastPlan = curPlan
       var continue = true
 
+      // 运行到固定点（或策略中指定的最大迭代次数）。curPlan.fastEquals(lastPlan)或者达到最大次数
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (continue) {
         curPlan = batch.rules.foldLeft(curPlan) {

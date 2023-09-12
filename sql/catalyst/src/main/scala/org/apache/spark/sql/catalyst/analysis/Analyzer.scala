@@ -2109,6 +2109,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
+   * 解析替换函数
    * Replaces [[UnresolvedFunc]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */

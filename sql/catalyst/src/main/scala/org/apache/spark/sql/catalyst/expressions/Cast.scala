@@ -1747,6 +1747,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   since = "1.0.0")
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
+  println("cast", child, " => ", dataType)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
