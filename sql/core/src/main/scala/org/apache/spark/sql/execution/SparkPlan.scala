@@ -283,6 +283,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def doPrepare(): Unit = {}
 
   /**
+   * 将查询结果生成为`RDD[InternalLow]`
    * Produces the result of the query as an `RDD[InternalRow]`
    *
    * Overridden by concrete implementations of SparkPlan.

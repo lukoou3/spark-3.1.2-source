@@ -366,11 +366,43 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("test_my_code1") {
+    val spark = SparkSession.builder()
+            .master("local[1]")
+            .appName("test")
+            .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
+            .getOrCreate()
+
+    val datas = List(
+      (11L, "莫南", 20, Seq(1,2,3)),
+      (21L, "燕青丝", 19, Seq(2,2,3)),
+      (31L, "沐璇音", 19, Seq(3,2,3)),
+      (41L, "苏流沙", 20, Seq(4,2,3))
+    )
+    var df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
+    df.createOrReplaceTempView("tab")
+    spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
+    /*df = df
+            //.selectExpr("if(true, age, code)").collect().foreach(println(_))
+            .filter("age > 1").selectExpr("Coalesce(age, code)", "code + 1")
+    println("*" * 100)
+    println(df.explain())
+    println("*" * 100)
+    println(df.explain(true))
+    println("*" * 100)
+    df.collect()*/
+
+    spark.stop()
+  }
+
   test("test_my_code2") {
     val spark = SparkSession.builder()
       .master("local[1]")
       .appName("test")
+            .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
       .getOrCreate()
+
+    spark.udf.register("", (x: Int) => x);
 
     val datas = List(
       (11, "莫南", 20, Seq(1,2,3)),
@@ -379,10 +411,11 @@ class DataFrameSuite extends QueryTest
       (41, "苏流沙", 20, Seq(4,2,3))
     )
 
-    spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
+    val df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
       //.selectExpr("code", "name", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
       //.selectExpr( "filter(cnts, `x` -> `x` <= 2)").collect().foreach(println(_))
-      .selectExpr("age + 1L + '3'").collect().foreach(println(_))
+    df.filter("name like 'aa%'").selectExpr("cnts[1] cnt", "if(age > 1, age + 1000, age + 2000)", "age + 1")
+            .collect().foreach(println(_))
 
     spark.stop()
   }
@@ -633,6 +666,7 @@ class DataFrameSuite extends QueryTest
     //var expression: Expression = parser.parseExpression("age1 + age2 + 3")
     var expression: Expression = parser.parseExpression("if(age1 > age2, age1 + age2 + '30', age1 + age2 + '3')")
     println("*" * 40)
+    // 转换绑定
     expression = expression.transform {
       case a: UnresolvedAttribute =>{
         map(a.name)

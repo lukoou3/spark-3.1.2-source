@@ -48,6 +48,7 @@ case class UnresolvedRelation(
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false)
   extends LeafNode with NamedRelation {
+  toString
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
@@ -141,6 +142,7 @@ case class UnresolvedTableValuedFunction(
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
+  var test = 1
 
   def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")

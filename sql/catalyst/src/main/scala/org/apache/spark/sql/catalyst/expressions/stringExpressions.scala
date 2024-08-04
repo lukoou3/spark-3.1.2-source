@@ -1632,6 +1632,7 @@ case class InitCap(child: Expression)
   since = "1.5.0")
 case class StringRepeat(str: Expression, times: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  var test = 1
 
   override def left: Expression = str
   override def right: Expression = times

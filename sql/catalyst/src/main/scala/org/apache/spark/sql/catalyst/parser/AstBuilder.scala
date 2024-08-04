@@ -715,7 +715,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
-      Project(namedExpressions, withFilter)
+      Project(namedExpressions, withFilter) // select
     } else {
       withFilter
     }
@@ -1874,7 +1874,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
               conf.caseSensitiveAnalysis)
           case _ =>
-            UnresolvedAttribute(nameParts :+ attr)
+            UnresolvedAttribute(nameParts :+ attr) // 创建UnresolvedAttribute
         }
       case e =>
         UnresolvedExtractValue(e, Literal(attr))
@@ -1891,7 +1891,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         if conf.supportQuotedRegexColumnName && canApplyRegex(ctx) =>
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
-        UnresolvedAttribute.quoted(ctx.getText)
+        UnresolvedAttribute.quoted(ctx.getText) //创建列引用
     }
 
   }

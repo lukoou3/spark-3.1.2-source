@@ -22,6 +22,10 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
 
 /**
+ * 用于计算近似分位数摘要的帮助程序类。该实现基于Greenwald，Michael和Khanna，Sanjeev的论文“分位数摘要的空间有效在线计算”中提出的算法。(https://doi.org/10.1145/375663.375670)
+ *
+ * 为了优化速度，它保留了最后一次看到的样本的内部缓冲区，并且只在超过一定大小阈值后插入它们。与原始算法相比，这保证了近乎恒定的运行时复杂性。
+ *
  * Helper class to compute approximate quantile summary.
  * This implementation is based on the algorithm proposed in the paper:
  * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
@@ -45,26 +49,30 @@ import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
 class QuantileSummaries(
     val compressThreshold: Int,
     val relativeError: Double,
-    val sampled: Array[Stats] = Array.empty,
-    val count: Long = 0L,
-    var compressed: Boolean = false) extends Serializable {
+    val sampled: Array[Stats] = Array.empty, // Greenwald Khanna论文的统计数据
+    val count: Long = 0L, // 插入的总数
+    var compressed: Boolean = false // statistics是否压缩
+) extends Serializable {
 
+  // 迄今为止看到的最新样本缓冲区
   // a buffer of latest samples seen so far
   private val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty
 
   import QuantileSummaries._
 
   /**
+   * 返回一个摘要，其中插入了给定的观察结果。此方法可以就地修改当前摘要（并返回相同的就地修改的摘要），也可以根据需要从头开始创建新的摘要。
    * Returns a summary with the given observation inserted into the summary.
    * This method may either modify in place the current summary (and return the same summary,
    * modified in place), or it may create a new summary from scratch it necessary.
    * @param x the new observation to insert into the summary
    */
   def insert(x: Double): QuantileSummaries = {
-    headSampled += x
-    compressed = false
-    if (headSampled.size >= defaultHeadSize) {
+    headSampled += x // 最新样本采样
+    compressed = false // 插入就设置为没压缩
+    if (headSampled.size >= defaultHeadSize) { //采样大于50000
       val result = this.withHeadBufferInserted
+      // 抽样结果大于10000，压缩
       if (result.sampled.length >= compressThreshold) {
         result.compress()
       } else {
@@ -76,6 +84,9 @@ class QuantileSummaries(
   }
 
   /**
+   * 在批次中插入一个数组（未排序的样本），首先对数组进行排序，以遍历单个批次中的汇总统计信息。
+   * 此方法不修改当前对象，并在必要时返回一个新副本。
+   *
    * Inserts an array of (unsorted samples) in a batch, sorting the array first to traverse
    * the summary statistics in a single batch.
    *
@@ -88,10 +99,13 @@ class QuantileSummaries(
       return this
     }
     var currentCount = count
+    // 排序
     val sorted = headSampled.toArray.sorted
     val newSamples: ArrayBuffer[Stats] = new ArrayBuffer[Stats]()
+    // 下一个插入元素的index
     // The index of the next element to insert
     var sampleIdx = 0
+    // index遍历排序后的抽样数组
     // The index of the sample currently being inserted.
     var opsIdx: Int = 0
     while (opsIdx < sorted.length) {
@@ -125,6 +139,8 @@ class QuantileSummaries(
   }
 
   /**
+   * 返回一个新的摘要，用于压缩摘要统计信息和头缓冲区。
+   * 这实现了GK算法的COMPRESS功能。它不会修改对象。
    * Returns a new summary that compresses the summary statistics and the head buffer.
    *
    * This implements the COMPRESS function of the GK algorithm. It does not modify the object.
@@ -136,6 +152,7 @@ class QuantileSummaries(
     val inserted = this.withHeadBufferInserted
     assert(inserted.headSampled.isEmpty)
     assert(inserted.count == count + headSampled.size)
+    // 压缩
     val compressed =
       compressImmut(inserted.sampled, mergeThreshold = 2 * relativeError * inserted.count)
     new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count, true)
@@ -229,6 +246,7 @@ class QuantileSummaries(
   }
 
   /**
+   * 查询分位数
    * Runs a query for a given quantile.
    * The result follows the approximation guarantees detailed above.
    * The query can only be run on a compressed summary: you need to call compress() before using
@@ -252,8 +270,9 @@ class QuantileSummaries(
       return Some(sampled.last.value)
     }
 
-    // Target rank
+    // Target rank, 分位数数据对应排名
     val rank = math.ceil(quantile * count).toLong
+    // 下面的应该都是套用公式
     val targetError = sampled.map(s => s.delta + s.g).max / 2
     // Minimum rank at current sample
     var minRank = 0L
@@ -291,13 +310,15 @@ object QuantileSummaries {
   val defaultRelativeError: Double = 0.01
 
   /**
+   * Greenwald Khanna论文的统计数据。
    * Statistics from the Greenwald-Khanna paper.
-   * @param value the sampled value
-   * @param g the minimum rank jump from the previous value's minimum rank
+   * @param value the sampled value 采样值
+   * @param g the minimum rank jump from the previous value's minimum rank 从上一个值的最小rank跳出来的最小rank
    * @param delta the maximum span of the rank.
    */
   case class Stats(value: Double, g: Long, delta: Long)
 
+  // 这应该是套用公式
   private def compressImmut(
       currentSamples: IndexedSeq[Stats],
       mergeThreshold: Double): Array[Stats] = {

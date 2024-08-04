@@ -38,6 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
+ * 用等效的Literal值替换可以静态计算的表达式。
  * Replaces [[Expression Expressions]] that can be statically evaluated with
  * equivalent [[Literal]] values.
  */
@@ -62,6 +63,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
         Literal(c.children.length / 2)
 
+      // foldable直接替换为Literal
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
     }
@@ -530,6 +532,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
+ * 简化不需要完整正则表达式来计算条件的LIKE表达式。例如，当表达式只是检查字符串是否以给定模式开头时。
  * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
  * For example, when the expression is just checking to see if a string starts with a given
  * pattern.

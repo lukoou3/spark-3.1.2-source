@@ -135,6 +135,7 @@ case class Generate(
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 }
 
+//
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output

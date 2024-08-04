@@ -1530,6 +1530,7 @@ class SessionCatalog(
       if (!isResolvingView ||
           !isTemporaryFunction(name) ||
           referredTempFunctionNames.contains(name.funcName)) {
+        // 查找函数
         // This function has been already loaded into the function registry.
         return functionRegistry.lookupFunction(name, children)
       }

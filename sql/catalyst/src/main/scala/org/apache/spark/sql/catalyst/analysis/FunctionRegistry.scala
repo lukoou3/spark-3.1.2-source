@@ -113,11 +113,13 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    // 查找生成函数
     val func = synchronized {
       functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
         throw new AnalysisException(s"undefined function $name")
       }
     }
+    // 生成函数
     func(children)
   }
 
@@ -604,6 +606,7 @@ object FunctionRegistry {
     } else {
       tag.runtimeClass.getConstructors
     }
+    // 看看我们是否能找到一个接受Seq[Expression]的构造函数
     // See if we can find a constructor that accepts Seq[Expression]
     val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
     val builder = (expressions: Seq[Expression]) => {

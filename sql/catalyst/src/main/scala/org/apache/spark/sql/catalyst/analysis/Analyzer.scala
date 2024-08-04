@@ -220,6 +220,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   override def batches: Seq[Batch] = Seq(
+    // 这些都是分析?
     Batch("Substitution", fixedPoint,
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
@@ -1494,6 +1495,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         e match {
           case f: LambdaFunction if !f.bound => f
           case u @ UnresolvedAttribute(nameParts) =>
+            println(s"get UnresolvedAttribute")
             // Leave unchanged if resolution fails. Hopefully will be resolved next round.
             val resolved =
               withPosition(u) {
@@ -1512,6 +1514,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
             logDebug(s"Resolving $u to $result")
             result
+          // 获取Array,Struct,Map属性
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
           case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
@@ -2130,6 +2133,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
+              // 匹配函数
               v1SessionCatalog.lookupFunction(name, children) match {
                 case generator: Generator => generator
                 case other =>
@@ -2139,6 +2143,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
             withPosition(u) {
+              // 匹配函数
               v1SessionCatalog.lookupFunction(funcId, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an

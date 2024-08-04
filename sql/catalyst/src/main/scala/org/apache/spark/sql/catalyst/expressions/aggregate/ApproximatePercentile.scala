@@ -212,6 +212,7 @@ object ApproximatePercentile {
   val DEFAULT_PERCENTILE_ACCURACY: Int = 10000
 
   /**
+   * 对QuantileSummaries(GK近似算法)的包装，核心实现逻辑在QuantileSummaries类里面
    * PercentileDigest is a probabilistic data structure used for approximating percentiles
    * with limited memory. PercentileDigest is backed by [[QuantileSummaries]].
    *
@@ -231,18 +232,25 @@ object ApproximatePercentile {
       summaries
     }
 
-    /** Insert an observation value into the PercentileDigest data structure. */
+    /**
+     * 插入一个值
+     * Insert an observation value into the PercentileDigest data structure.
+     */
     def add(value: Double): Unit = {
       summaries = summaries.insert(value)
     }
 
-    /** In-place merges in another PercentileDigest. */
+    /**
+     * 原地修改合并其他PercentileDigest对象
+     * In-place merges in another PercentileDigest.
+     */
     def merge(other: PercentileDigest): Unit = {
       if (!isCompressed) compress()
       summaries = summaries.merge(other.quantileSummaries)
     }
 
     /**
+     * 查询对应位置的分位数
      * Returns the approximate percentiles of all observation values at the given percentages.
      * A percentile is a watermark value below which a given percentage of observation values fall.
      * For example, the following code returns the 25th, median, and 75th percentiles of

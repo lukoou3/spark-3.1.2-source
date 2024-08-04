@@ -86,11 +86,13 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       // A safe upper bound
       (headBufferSize + bufferSize) * 2
     }
+    println(memoryFootPrintUpperBound)
 
     Seq(100, 1000, 10000, 100000, 1000000, 10000000).foreach { count =>
       val buffer = new PercentileDigest(relativeError)
       // Worst case, data is linear sorted
       (0 until count).foreach(buffer.add(_))
+      println(SizeEstimator.estimate(buffer))
       assert(SizeEstimator.estimate(buffer) < memoryFootPrintUpperBound)
     }
   }

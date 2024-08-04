@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
   since = "1.0.0")
 // scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpression {
-
+println(11)
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
 

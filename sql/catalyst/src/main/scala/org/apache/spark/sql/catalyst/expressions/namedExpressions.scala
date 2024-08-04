@@ -247,7 +247,7 @@ case class AttributeReference(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty[String])
   extends Attribute with Unevaluable {
-
+  var test = 1
   /**
    * Returns true iff the expression id is the same for both attributes.
    */

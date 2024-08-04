@@ -313,6 +313,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 private[spark] object RangePartitioner {
 
   /**
+   * 蓄水池抽样，范围分区使用，order by使用范围分区
    * Sketches the input RDD via reservoir sampling on each partition.
    *
    * @param rdd the input RDD to sketch ;需要采集数据的RDD
@@ -326,6 +327,7 @@ private[spark] object RangePartitioner {
     val shift = rdd.id
     // val classTagK = classTag[K] // to avoid serializing the entire partitioner object
     val sketched = rdd.mapPartitionsWithIndex { (idx, iter) =>
+      // 种子是固定的
       val seed = byteswap32(idx ^ (shift << 16))
       val (sample, n) = SamplingUtils.reservoirSampleAndCount(
         iter, sampleSizePerPartition, seed)

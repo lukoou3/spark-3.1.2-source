@@ -723,6 +723,7 @@ object BinaryOperator {
 }
 
 /**
+ * 一个有三个输入和一个输出的表达式。如果任何输入被评估为null，则默认情况下输出被评估为空。
  * An expression with three inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
  */

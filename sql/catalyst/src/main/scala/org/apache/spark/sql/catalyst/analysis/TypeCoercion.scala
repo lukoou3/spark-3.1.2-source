@@ -572,6 +572,7 @@ object TypeCoercion {
   }
 
   /**
+   * 这确保了各种功能的类型符合预期。
    * This ensure that the types for various functions are as expected.
    */
   object FunctionArgumentConversion extends TypeCoercionRule {
@@ -746,6 +747,7 @@ object TypeCoercion {
   }
 
   /**
+   * 将If语句的不同分支的类型强制转换为通用类型。
    * Coerces the type of different branches of If statement to a common type.
    */
   object IfCoercion extends TypeCoercionRule {
@@ -1014,6 +1016,7 @@ object TypeCoercion {
         case (DateType, TimestampType) => TimestampType
         case (TimestampType, DateType) => DateType
 
+        // string类型可以隐士转换成这么多类型
         // Implicit cast from/to string
         case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
         case (StringType, target: NumericType) => target
@@ -1126,6 +1129,7 @@ object TypeCoercion {
   }
 }
 
+//
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {
   /**
    * Applies any changes to [[AttributeReference]] data types that are made by the transform method

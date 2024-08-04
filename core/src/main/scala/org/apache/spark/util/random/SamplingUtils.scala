@@ -23,6 +23,7 @@ import scala.util.Random
 private[spark] object SamplingUtils {
 
   /**
+   * 蓄水池抽样，并且返回输入size
    * Reservoir sampling implementation that also returns the input size.
    *
    * @param input input size
@@ -36,6 +37,7 @@ private[spark] object SamplingUtils {
       seed: Long = Random.nextLong())
     : (Array[T], Long) = {
     val reservoir = new Array[T](k)
+    // 前k个元素放入蓄水池
     // Put the first k elements in the reservoir.
     var i = 0
     while (i < k && input.hasNext) {
@@ -44,6 +46,7 @@ private[spark] object SamplingUtils {
       i += 1
     }
 
+    // 如果我们已经消耗了所有元素，请将其返回。否则进行更换。
     // If we have consumed all the elements, return them. Otherwise do the replacement.
     if (i < k) {
       // If input size < k, trim the array to return only an array of input size.
@@ -51,12 +54,14 @@ private[spark] object SamplingUtils {
       System.arraycopy(reservoir, 0, trimReservoir, 0, i)
       (trimReservoir, i)
     } else {
+      // 如果输入大小>k，请继续采样过程。
       // If input size > k, continue the sampling process.
       var l = i.toLong
-      val rand = new XORShiftRandom(seed)
+      val rand = new XORShiftRandom(seed) // 随机生成器
       while (input.hasNext) {
         val item = input.next()
         l += 1
+        // 水塘中有k个元素，总数据中前l个元素已被消耗掉。它应该以概率k/l来选择。下面的表达式是从[0，l）中一致选择的随机长表达式
         // There are k elements in the reservoir, and the l-th element has been
         // consumed. It should be chosen with probability k/l. The expression
         // below is a random long chosen uniformly from [0,l)
