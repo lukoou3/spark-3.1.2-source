@@ -434,16 +434,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
+   * 转换逻辑聚合算子到物理算子
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
-        val aggregateExpressions = aggExpressions.map(expr =>
-          expr.asInstanceOf[AggregateExpression])
+        val aggregateExpressions = aggExpressions.map(expr => expr.asInstanceOf[AggregateExpression])
 
-        val (functionsWithDistinct, functionsWithoutDistinct) =
-          aggregateExpressions.partition(_.isDistinct)
+        val (functionsWithDistinct, functionsWithoutDistinct) = aggregateExpressions.partition(_.isDistinct)
         if (functionsWithDistinct.map(
           _.aggregateFunction.children.filterNot(_.foldable).toSet).distinct.length > 1) {
           // This is a sanity check. We should not reach here when we have multiple distinct
@@ -464,11 +463,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
+            // 大部分就是这个, 没有Distinct语句
             AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
-              planLater(child))
+              planLater(child)) // 这里为啥是planLater，不先解析child
           } else {
             // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain
             // more than one DISTINCT aggregate function, all of those functions will have the

@@ -54,6 +54,7 @@ case class ScalaUDF(
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
+  var test = 1
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

@@ -52,6 +52,7 @@ object AggUtils {
       child: SparkPlan): SparkPlan = {
     val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+    // 使用hash aggregate
     if (useHash) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
@@ -126,7 +127,7 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes,
         initialInputBufferOffset = groupingExpressions.length,
         resultExpressions = resultExpressions,
-        child = partialAggregate)
+        child = partialAggregate) // reduce阶段的child就是map阶段
 
     finalAggregate :: Nil
   }

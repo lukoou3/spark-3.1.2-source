@@ -239,13 +239,14 @@ abstract class AggregationIterator(
       }
       val aggregateResult = new SpecificInternalRow(aggregateAttributes.map(_.dataType))
       val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)
-      expressionAggEvalProjection.target(aggregateResult)
+      expressionAggEvalProjection.target(aggregateResult) // expressionAggEvalProjection更新aggregateResult
 
       val resultProjection =
         UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
       resultProjection.initialize(partIndex)
 
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
+        // expressionAggEvalProjection也是更新aggregateResult
         // Generate results for all expression-based aggregate functions.
         expressionAggEvalProjection(currentBuffer)
         // Generate results for all imperative aggregate functions.

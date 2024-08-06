@@ -46,17 +46,22 @@ import org.apache.spark.util.Utils
  */
 case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
-    groupingExpressions: Seq[NamedExpression],
-    aggregateExpressions: Seq[AggregateExpression],
-    aggregateAttributes: Seq[Attribute],
+    groupingExpressions: Seq[NamedExpression], // map阶段：groupingExpressions . reduce阶段：groupingAttributes
+    aggregateExpressions: Seq[AggregateExpression], // map阶段：partial_aggregateExpressions  . reduce阶段：final_aggregateExpressions
+    aggregateAttributes: Seq[Attribute], // map阶段：aggBufferAttributes  . reduce阶段：resultAttribute
     initialInputBufferOffset: Int,
-    resultExpressions: Seq[NamedExpression],
+    resultExpressions: Seq[NamedExpression], // map阶段：groupingAttributes + AggBufferAttributes . reduce阶段：就是最终的resultExpressions
     child: SparkPlan)
   extends BaseAggregateExec
   with BlockingOperatorWithCodegen {
-
+  var test = 1
+  println("call HashAggregateExec")
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
+  // this.allAttributes.attrs.toSeq.mkString(" | ")
+  // child输出 + aggBuffer + aggBuffer + aggBuffer. age#10 | sum#19 | count#20L | sum#19 | count#20L | sum#21 | count#22L
+  // child输出 + aggBuffer + finalAgg + aggBuffer. sum#21 | count#22L | sum#19 | count#20L | avg(cast(age#10 as bigint))#17 | sum#21 | count#22L
+  // 1(child输出-child输出) 和 3(aggBuffer-finalAgg) 不同
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
@@ -87,6 +92,7 @@ case class HashAggregateExec(
     val avgHashProbe = longMetric("avgHashProbe")
     val aggTime = longMetric("aggTime")
 
+    // 这里有两种情况, map阶段和reduce阶段
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
       val beforeAgg = System.nanoTime()
@@ -96,6 +102,7 @@ case class HashAggregateExec(
         // so return an empty iterator.
         Iterator.empty
       } else {
+        // 聚合的处理逻辑
         val aggregationIterator =
           new TungstenAggregationIterator(
             partIndex,

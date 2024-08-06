@@ -27,6 +27,7 @@ import scala.util.Random
 import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
+//import org.apache.spark.sql.api.java.UDF1
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts.implicitCast
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, ResolveLambdaVariables, UnresolvedAttribute, UnresolvedFunction}
@@ -381,7 +382,8 @@ class DataFrameSuite extends QueryTest
     )
     var df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
     df.createOrReplaceTempView("tab")
-    spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
+    //spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
+    spark.sql("select avg(age) avg_age from tab").collect()
     /*df = df
             //.selectExpr("if(true, age, code)").collect().foreach(println(_))
             .filter("age > 1").selectExpr("Coalesce(age, code)", "code + 1")
@@ -402,19 +404,25 @@ class DataFrameSuite extends QueryTest
             .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
       .getOrCreate()
 
-    spark.udf.register("", (x: Int) => x);
+    spark.udf.register("my_udf", (x: java.lang.Integer) => {
+      x * 2
+    })
+    // java的udf不会校验函数的输入参数类型，没提取参数信息
+    /*spark.udf.register("my_udf", new UDF1[Int, Int] {
+      override def call(x: Int): Int = x * 2
+    }, IntegerType)*/
 
     val datas = List(
-      (11, "莫南", 20, Seq(1,2,3)),
-      (21, "燕青丝", 19, Seq(2,2,3)),
-      (31, "沐璇音", 19, Seq(3,2,3)),
-      (41, "苏流沙", 20, Seq(4,2,3))
+      (11L, "莫南", 20, Seq(1,2,3)),
+      (21L, "燕青丝", 19, Seq(2,2,3)),
+      (31L, "沐璇音", 19, Seq(3,2,3)),
+      (41L, "苏流沙", 20, Seq(4,2,3))
     )
 
     val df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
       //.selectExpr("code", "name", "filter(cnts, x -> x <= 2)").collect().foreach(println(_))
       //.selectExpr( "filter(cnts, `x` -> `x` <= 2)").collect().foreach(println(_))
-    df.filter("name like 'aa%'").selectExpr("cnts[1] cnt", "if(age > 1, age + 1000, age + 2000)", "age + 1")
+    df.filter("name not like 'aa%'").selectExpr("cnts[1] cnt", "if(age > 1, age + 1000, age + 2000)", "age + 1", "my_udf(code)")
             .collect().foreach(println(_))
 
     spark.stop()

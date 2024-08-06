@@ -87,8 +87,8 @@ class TungstenAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    originalInputAttributes: Seq[Attribute],
-    inputIter: Iterator[InternalRow],
+    originalInputAttributes: Seq[Attribute], // 输入schema
+    inputIter: Iterator[InternalRow], // 输入
     testFallbackStartsAt: Option[(Int, Int)],
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
@@ -309,6 +309,7 @@ class TungstenAggregationIterator(
   // The function used to process rows in a group
   private[this] var sortBasedProcessRow: (InternalRow, InternalRow) => Unit = null
 
+  // 处理一组数据，直到发现新的组. hash模式是怎么处理的呢？
   // Processes rows in the current group. It will stop when it find a new group.
   private def processCurrentSortedGroup(): Unit = {
     // First, we need to copy nextGroupingKey to currentGroupingKey.
@@ -330,6 +331,7 @@ class TungstenAggregationIterator(
       val groupingKey = sortedKVIterator.getKey
       val inputAggregationBuffer = sortedKVIterator.getValue
 
+      // 处理一组数据，直到发现新的组
       // Check if the current row belongs the current input row.
       if (currentGroupingKey.equals(groupingKey)) {
         sortBasedProcessRow(sortBasedAggregationBuffer, inputAggregationBuffer)
@@ -357,6 +359,7 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   /**
+   * 这个最开始就直接处理所有行了，next()中的generateOutput只是生成结果。AggregationIterator类的注释也使这样说的。
    * Start processing input rows.
    */
   processInputs(testFallbackStartsAt.getOrElse((Int.MaxValue, Int.MaxValue)))
@@ -401,6 +404,7 @@ class TungstenAggregationIterator(
   override final def next(): UnsafeRow = {
     if (hasNext) {
       val res = if (sortBased) {
+
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
@@ -411,6 +415,7 @@ class TungstenAggregationIterator(
         outputRow
       } else {
         // We did not fall back to sort-based aggregation.
+        // generateOutput里存的就是处理过程吗。怎么保证处理一组数据呢？
         val result =
           generateOutput(
             aggregationBufferMapIterator.getKey,
