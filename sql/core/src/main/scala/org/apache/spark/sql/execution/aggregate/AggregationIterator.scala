@@ -67,6 +67,7 @@ abstract class AggregationIterator(
       s"$aggregateExpressions can't have Partial/PartialMerge and Final/Complete in the same time.")
   }
 
+  // 初始化所有的AggregateFunctions绑定references，设置inputBufferOffset and mutableBufferOffset.
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
   protected def initializeAggregateFunctions(
@@ -74,6 +75,7 @@ abstract class AggregationIterator(
       startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
+    // 聚合函数数组
     val functions = new Array[AggregateFunction](expressions.length)
     var i = 0
     val inputAttributeSeq: AttributeSeq = inputAttributes
@@ -81,6 +83,9 @@ abstract class AggregationIterator(
       val func = expression.aggregateFunction
       val funcWithBoundReferences: AggregateFunction = expression.mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
+          // 函数不是基于表达式的聚合函数（不支持代码生成）并且是Partial或者Complete模式。
+          // 调用函数的children的eval更新aggregate function。
+          // 这些eval调用需要BoundReferences才能工作。
           // We need to create BoundReferences if the function is not an
           // expression-based aggregate function (it does not support code-gen) and the mode of
           // this function is Partial or Complete because we will call eval of this
@@ -88,6 +93,7 @@ abstract class AggregationIterator(
           // Those eval calls require BoundReferences to work.
           BindReferences.bindReference(func, inputAttributeSeq)
         case _ =>
+          // 其他情况仅仅需要设置inputBufferOffset
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
           val updatedFunc = func match {
@@ -157,6 +163,7 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
+      // mergeExpressions聚合函数更新
       val mergeExpressions =
         functions.zip(expressions.map(ae => (ae.mode, ae.isDistinct, ae.filter))).flatMap {
           case (ae: DeclarativeAggregate, (mode, isDistinct, filter)) =>
@@ -171,7 +178,7 @@ abstract class AggregationIterator(
                 }
               case PartialMerge | Final => ae.mergeExpressions
             }
-          case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          case (agg: AggregateFunction, _) => Seq.fill(agg.aggBufferAttributes.length)(NoOp) // ImperativeAggregate聚合函数站位
         }
       // Initialize predicates for aggregate functions if necessary
       val predicateOptions = expressions.map {
@@ -185,6 +192,7 @@ abstract class AggregationIterator(
           }
         case _ => None
       }
+      // 更新ImperativeAggregate聚合函数
       val updateFunctions = functions.zipWithIndex.collect {
         case (ae: ImperativeAggregate, i) =>
           expressions(i).mode match {
@@ -201,6 +209,7 @@ abstract class AggregationIterator(
       }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
+      //
       val updateProjection =
         newMutableProjection(mergeExpressions, aggregationBufferSchema ++ inputAttributes)
 
