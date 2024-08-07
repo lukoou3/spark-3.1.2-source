@@ -380,10 +380,10 @@ class DataFrameSuite extends QueryTest
       (31L, "沐璇音", 19, Seq(3,2,3)),
       (41L, "苏流沙", 20, Seq(4,2,3))
     )
-    var df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
-    df.createOrReplaceTempView("tab")
+    val df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
+    //df.createOrReplaceTempView("tab")
     //spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
-    spark.sql("select avg(age) avg_age from tab").collect()
+    df.selectExpr("avg(age) avg_age").collect()
     /*df = df
             //.selectExpr("if(true, age, code)").collect().foreach(println(_))
             .filter("age > 1").selectExpr("Coalesce(age, code)", "code + 1")
