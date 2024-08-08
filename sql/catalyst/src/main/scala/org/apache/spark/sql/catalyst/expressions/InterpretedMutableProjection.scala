@@ -90,6 +90,7 @@ class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mutable
       runtime.setInput(input)
     }
 
+    // 就是把flatMap后的AggregateFunction处理结果update到mutableRow
     var i = 0
     while (i < validExprs.length) {
       val (_, ordinal) = validExprs(i)

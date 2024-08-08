@@ -163,7 +163,7 @@ abstract class AggregationIterator(
       inputAttributes: Seq[Attribute]): (InternalRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
-      // mergeExpressions聚合函数更新
+      // mergeExpressions聚合函数更新，这里使用的是flatMap，这样Average等就能够和其它sum等函数展平在一个row里处理了
       val mergeExpressions =
         functions.zip(expressions.map(ae => (ae.mode, ae.isDistinct, ae.filter))).flatMap {
           case (ae: DeclarativeAggregate, (mode, isDistinct, filter)) =>
@@ -209,11 +209,13 @@ abstract class AggregationIterator(
       }.toArray
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
-      //
+      // 更新expression-based aggregates的逻辑
       val updateProjection =
         newMutableProjection(mergeExpressions, aggregationBufferSchema ++ inputAttributes)
 
       (currentBuffer: InternalRow, row: InternalRow) => {
+        // map阶段：就是把flatMap后的AggregateFunction处理结果update到mutableRow
+        // reduce阶段：也是是把flatMap后的AggregateFunction处理结果update到mutableRow，就是输入Schema不同
         // Process all expression-based aggregate functions.
         updateProjection.target(currentBuffer)(joinedRow(currentBuffer, row))
         // Process all imperative aggregate functions.
@@ -236,11 +238,13 @@ abstract class AggregationIterator(
     UnsafeProjection.create(groupingExpressions, inputAttributes)
   protected val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
+  // 输出结果row
   // Initializing the function used to generate the output row.
   protected def generateResultProjection(): (UnsafeRow, InternalRow) => UnsafeRow = {
     val joinedRow = new JoinedRow
     val modes = aggregateExpressions.map(_.mode).distinct
     val bufferAttributes = aggregateFunctions.flatMap(_.aggBufferAttributes)
+    // reduce阶段的输出
     if (modes.contains(Final) || modes.contains(Complete)) {
       val evalExpressions = aggregateFunctions.map {
         case ae: DeclarativeAggregate => ae.evaluateExpression
@@ -266,9 +270,11 @@ abstract class AggregationIterator(
             allImperativeAggregateFunctions(i).eval(currentBuffer))
           i += 1
         }
+        // 就是把key和聚合值合在一起输出
         resultProjection(joinedRow(currentGroupingKey, aggregateResult))
       }
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
+      // map阶段的输出
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)

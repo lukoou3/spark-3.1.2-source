@@ -643,7 +643,7 @@ object TypeCoercion {
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
 
       case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
-      case Average(e @ IntegralType()) if e.dataType != LongType =>
+      case Average(e @ IntegralType()) if e.dataType != LongType => // 平均值的输入非long型的都会转为long
         Average(Cast(e, LongType))
       case Average(e @ FractionalType()) if e.dataType != DoubleType =>
         Average(Cast(e, DoubleType))

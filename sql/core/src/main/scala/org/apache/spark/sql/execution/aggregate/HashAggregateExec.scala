@@ -112,6 +112,7 @@ case class HashAggregateExec(
             initialInputBufferOffset,
             resultExpressions,
             (expressions, inputSchema) =>
+              // 用于创建mutable projections，就是初始化buffer。
               MutableProjection.create(expressions, inputSchema),
             inputAttributes,
             iter,
