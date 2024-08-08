@@ -226,6 +226,8 @@ object Block {
 
   implicit class BlockHelper(val sc: StringContext) extends AnyVal {
     /**
+     * 一个字符串插值器，保留对JavaCode输入的引用，在其他方面表现得像Scala内置的StringContext.（）插值器，
+     * 即它将处理代码部分中的转义，而不会处理输入参数中的转义。
      * A string interpolator that retains references to the `JavaCode` inputs, and behaves like
      * the Scala builtin StringContext.s() interpolator otherwise, i.e. it will treat escapes in
      * the code parts, and will not treat escapes in the input arguments.
@@ -242,6 +244,7 @@ object Block {
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }
 
+        // 折叠字面量字符串到代码部分
         val (codeParts, blockInputs) = foldLiteralArgs(sc.parts, args)
         CodeBlock(codeParts, blockInputs)
       }
@@ -250,8 +253,8 @@ object Block {
 
   // Folds eagerly the literal args into the code parts.
   private def foldLiteralArgs(parts: Seq[String], args: Seq[Any]): (Seq[String], Seq[JavaCode]) = {
-    val codeParts = ArrayBuffer.empty[String]
-    val blockInputs = ArrayBuffer.empty[JavaCode]
+    val codeParts = ArrayBuffer.empty[String] // 代码部分
+    val blockInputs = ArrayBuffer.empty[JavaCode] // 输入
 
     val strings = parts.iterator
     val inputs = args.iterator

@@ -1181,6 +1181,8 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * 为表达式生成代码。如果doSubexpressionElimination为true，则将执行子表达式消除。
+   * 子表达式消除假设每个表达式的代码将按表达式顺序组合。
    * Generates code for expressions. If doSubexpressionElimination is true, subexpression
    * elimination will be performed. Subexpression elimination assumes that the code for each
    * expression will be combined in the `expressions` order.

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType}
 
 /**
  * A test suite that makes sure code generation handles expression internally states correctly.
@@ -83,6 +83,47 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     val instance2 = GeneratePredicate.generate(expr2)
     assert(instance1.eval(null) === false)
     assert(instance2.eval(null))
+  }
+
+  test("simple") {
+    val expr = GreaterThan(BoundReference(0, IntegerType, true), BoundReference(1, IntegerType, true))
+    val instance = GeneratePredicate.generate(expr)
+    val row = new GenericInternalRow(new Array[Any](2))
+    row.update(0, 1)
+    row.update(1, 2)
+    println(instance.eval(row))
+    row.update(0, 2)
+    row.update(1, 1)
+    println(instance.eval(row))
+  }
+
+  test("genCode") {
+    var ctx = new CodegenContext
+    val b = BoundReference(0, IntegerType, true)
+    val exprCode1: ExprCode = b.genCode(ctx)
+    println(exprCode1)
+    println("*"*10)
+    println("*code:" + exprCode1.code)
+    println("*isNull:" + exprCode1.isNull)
+    println("*value:" + exprCode1.value)
+    println("*"*60)
+    ctx = new CodegenContext
+    val expr = GreaterThan(BoundReference(0, IntegerType, true), BoundReference(1, IntegerType, true))
+    val exprCode2: ExprCode = expr.genCode(ctx)
+    println(exprCode2)
+    println("*"*10)
+    println("*code:" + exprCode2.code)
+    println("*isNull:" + exprCode2.isNull)
+    println("*value:" + exprCode2.value)
+    println("*"*60)
+    ctx = new CodegenContext
+    val abs = Abs(BoundReference(0, IntegerType, true))
+    val exprCode3: ExprCode = abs.genCode(ctx)
+    println(exprCode3)
+    println("*"*10)
+    println("*code:" + exprCode3.code)
+    println("*isNull:" + exprCode3.isNull)
+    println("*value:" + exprCode3.value)
   }
 
 }

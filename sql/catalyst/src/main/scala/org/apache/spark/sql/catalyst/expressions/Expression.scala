@@ -224,6 +224,8 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
+   * 返回可以编译以计算此表达式的Java源代码。默认行为是调用表达式的eval方法。
+   * 具体的表达式实现应该覆盖此内容以进行实际的代码生成。
    * Returns Java source code that can be compiled to evaluate this expression.
    * The default behavior is to call the eval method of the expression. Concrete expression
    * implementations should override this to do actual code generation.
