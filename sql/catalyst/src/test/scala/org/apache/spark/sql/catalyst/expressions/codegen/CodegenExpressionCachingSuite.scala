@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A test suite that makes sure code generation handles expression internally states correctly.
@@ -124,8 +126,46 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     println("*code:" + exprCode3.code)
     println("*isNull:" + exprCode3.isNull)
     println("*value:" + exprCode3.value)
+
+    println("*"*60)
+    SQLConf.get.setConfString("spark.sql.codegen.comments", "true")
+    ctx = new CodegenContext
+    val abs2 = Abs(BoundReference(0, IntegerType, true))
+    val exprCode4: ExprCode = abs2.genCode(ctx)
+    println(exprCode4)
+    println("*"*10)
+    println("*code:" + exprCode4.code)
+    println("*isNull:" + exprCode4.isNull)
+    println("*value:" + exprCode4.value)
   }
 
+  test("genCodeAddReferenceObj") {
+    var ctx = new CodegenContext
+    val b = Cast(BoundReference(2, DateType, true), StringType, Some("+08:00"))
+    val exprCode1: ExprCode = b.genCode(ctx)
+    println(exprCode1)
+    println("*"*10)
+    println("*code:" + exprCode1.code)
+    println("*isNull:" + exprCode1.isNull)
+    println("*value:" + exprCode1.value)
+    println("*"*60)
+
+  }
+
+  test("simpleAddReferenceObj") {
+    val expr = GreaterThan(
+      BoundReference(0, StringType, true),
+      Cast(BoundReference(1, DateType, true), StringType, Some("+08:00"))
+    )
+    val instance = GeneratePredicate.generate(expr)
+    val row = new GenericInternalRow(new Array[Any](2))
+    row.update(0, UTF8String.fromString("1970-01-02"))
+    row.update(1, 1)
+    println(instance.eval(row))
+    row.update(0, UTF8String.fromString("1970-01-03"))
+    row.update(1, 1)
+    println(instance.eval(row))
+  }
 }
 
 /**

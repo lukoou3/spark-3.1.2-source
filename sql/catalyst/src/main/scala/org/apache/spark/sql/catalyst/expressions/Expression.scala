@@ -259,10 +259,12 @@ abstract class Expression extends TreeNode[Expression] {
   def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
+   * 返回一个表达式，其中已尽最大努力以一种保留结果但删除外观变化（区分大小写、交换操作的顺序等）的方式对其进行转换。有关更多详细信息，请参阅规范化。
    * Returns an expression where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
    * commutative operations, etc.)  See [[Canonicalize]] for more details.
    *
+   * 其中this.canonicalize==other.canonicalized的确定性表达式将始终得到相同的结果。
    * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
    * evaluate to the same result.
    */
@@ -272,6 +274,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
+   * 当两个表达式总是计算相同的结果时返回true，即使它们在外观上有所不同（即属性中名称的大小写可能不同）。
    * Returns true when two expressions will always compute the same result, even if they differ
    * cosmetically (i.e. capitalization of names in attributes may be different).
    *

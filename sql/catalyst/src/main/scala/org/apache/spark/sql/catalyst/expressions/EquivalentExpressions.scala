@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 
 /**
+ * 此类用于计算（子）表达式树的等式。表达式可以添加到此类中，随后它们会查询表达式相等性。如果对于相同的输入产生相同的结果，则认为表达式树是相等的。
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
  * to this class and they subsequently query for expression equality. Expression trees are
  * considered equal if for the same input(s), the same result is produced.
@@ -135,6 +136,7 @@ class EquivalentExpressions {
   }
 
   /**
+   * 递归地将表达式添加到此数据结构中。如果找到匹配的表达式，则停止。也就是说，如果已经添加了expr，则不会添加其子项。
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
    */
@@ -142,6 +144,7 @@ class EquivalentExpressions {
       expr: Expression,
       addFunc: Expression => Boolean = addExpr): Unit = {
     val skip = expr.isInstanceOf[LeafExpression] ||
+      // `LambdaVariable通常用作循环变量，不能在循环前对其进行求值。因此，我们无法计算开头包含“LambdaVariable”的子表达式。
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
       expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||

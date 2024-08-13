@@ -123,6 +123,7 @@ object SortOrder {
 }
 
 /**
+ * 用于生成排序中使用的64位长前缀的表达式。如果排序也必须对空键进行操作，则可以使用this.nullValue代替排序中发出的空前缀。
  * An expression to generate a 64-bit long prefix used in sorting. If the sort must operate over
  * null keys as well, this.nullValue can be used in place of emitted null prefixes in the sort.
  */

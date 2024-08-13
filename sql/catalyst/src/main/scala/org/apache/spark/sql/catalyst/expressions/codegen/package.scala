@@ -41,6 +41,7 @@ package object codegen {
   }
 
   /**
+   * 使用javap将字节码从类转储到屏幕。
    * Dumps the bytecode from a class to the screen using javap.
    */
   object DumpByteCode {

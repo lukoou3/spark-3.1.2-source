@@ -132,9 +132,13 @@ class CodegenContext extends Logging {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+   * 将对象添加到引用中。
+   * 返回访问它的代码。
    * Add an object to `references`.
    *
    * Returns the code to access it.
+   *
+   * 这不是将对象存储到字段中，而是在使用时从引用字段引用它，因为类中的字段数量有限，所以我们应该减少它。
    *
    * This does not to store the object into field but refer it from the references field at the
    * time of use because number of fields in class is limited so we should reduce it.
@@ -401,6 +405,8 @@ class CodegenContext extends Logging {
   }
 
   /**
+   *
+   * 包含等效的表达式。用于在代码生成过程中执行子表达式消除。对于出现多次的表达式，生成其他代码以防止重新计算值。
    * Holds expressions that are equivalent. Used to perform subexpression elimination
    * during codegen.
    *
@@ -410,6 +416,7 @@ class CodegenContext extends Logging {
    * For example, consider two expression generated from this SQL statement:
    *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
+   *  equaltExpression将匹配包含col1+col2的树，并且只计算一次。
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
    *  be evaluated once.
    */
@@ -578,6 +585,7 @@ class CodegenContext extends Logging {
   private val placeHolderToComments = new mutable.HashMap[String, String]
 
   /**
+   * 返回在此CodegenContext实例中唯一的术语名称。
    * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
   def freshName(name: String): String = synchronized {

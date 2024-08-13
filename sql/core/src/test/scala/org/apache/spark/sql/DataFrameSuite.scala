@@ -371,7 +371,7 @@ class DataFrameSuite extends QueryTest
     val spark = SparkSession.builder()
             .master("local[1]")
             .appName("test")
-            .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
+            //.config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
             .getOrCreate()
 
     val datas = List(
@@ -383,7 +383,9 @@ class DataFrameSuite extends QueryTest
     val df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
     //df.createOrReplaceTempView("tab")
     //spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
-    df.selectExpr("avg(age) avg_age").collect()
+    //df.selectExpr("avg(age) avg_age").collect()
+    //df.selectExpr("if(age + 1 > 2, age + 1, 2) a", "age + 1 b").collect()
+    df.selectExpr("if(age + 1 > 2, age + 1, 2) a").collect()
     /*df = df
             //.selectExpr("if(true, age, code)").collect().foreach(println(_))
             .filter("age > 1").selectExpr("Coalesce(age, code)", "code + 1")

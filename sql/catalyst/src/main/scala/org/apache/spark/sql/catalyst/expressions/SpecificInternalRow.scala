@@ -186,6 +186,7 @@ final class MutableAny extends MutableValue {
 }
 
 /**
+ * 一种行类型，包含一个数组专用的容器对象，类型为MutableValue，根据每列的dataTypes选择。其目的是在修改基元列的值时减少垃圾。
  * A row type that holds an array specialized container objects, of type [[MutableValue]], chosen
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
  * values of primitive columns.
