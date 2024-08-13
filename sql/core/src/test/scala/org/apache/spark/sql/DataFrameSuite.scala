@@ -385,7 +385,7 @@ class DataFrameSuite extends QueryTest
     //spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
     //df.selectExpr("avg(age) avg_age").collect()
     //df.selectExpr("if(age + 1 > 2, age + 1, 2) a", "age + 1 b").collect()
-    df.selectExpr("if(age + 1 > 2, age + 1, 2) a").collect()
+    df.selectExpr("code", "explode(cnts) as cnt", "age + 1 a").collect()
     /*df = df
             //.selectExpr("if(true, age, code)").collect().foreach(println(_))
             .filter("age > 1").selectExpr("Coalesce(age, code)", "code + 1")

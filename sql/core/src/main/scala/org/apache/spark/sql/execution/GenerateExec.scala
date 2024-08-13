@@ -39,6 +39,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
 }
 
 /**
+ * Explode等Generator对应的物理执行计划
  * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
@@ -92,7 +93,7 @@ case class GenerateExec(
         iter.flatMap { row =>
           // we should always set the left (required child output)
           joinedRow.withLeft(pruneChildForResult(row))
-          val outputRows = boundGenerator.eval(row)
+          val outputRows = boundGenerator.eval(row) //Explode等Generator不执行代码生成
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
           } else {
