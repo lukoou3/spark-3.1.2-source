@@ -82,8 +82,12 @@ object TypeCoercion {
       DoubleType)
 
   /**
+   * 案例1类型加宽（有关类型强制，请参阅TypeCoercion上面的classdoc注释）。
    * Case 1 type widening (see the classdoc comment above for TypeCoercion).
    *
+   * 查找binary expression可能使用的两种类型中最紧密的常见类型。
+   * 这处理了除固定精度小数之外的所有数值类型，这些小数彼此交互或与基本类型交互，因为在这种情况下，结果的精度和规模取决于操作。
+   * 这些规则在DecimalPrecision中实现。
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
    * with primitive types, because in that case the precision and scale of the result depends on
@@ -210,6 +214,7 @@ object TypeCoercion {
   /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
+   * 与findTightestCommonType的主要区别在于，在这里我们允许在扩大decimal和double以及升级为string时损失一些精度。
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
    * loss of precision when widening decimal and double, and promotion to string.
    */
@@ -414,6 +419,7 @@ object TypeCoercion {
   }
 
   /**
+   * arithmetic表达式转换
    * Promotes strings that appear in arithmetic expressions.
    */
   object PromoteStrings extends TypeCoercionRule {
@@ -688,6 +694,7 @@ object TypeCoercion {
   }
 
   /**
+   * Hive只使用DIV运算符执行整数除法。这里/的参数总是转换为double类型。
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
@@ -881,6 +888,7 @@ object TypeCoercion {
   }
 
   /**
+   * 根据Expression的预期输input types强制转换类型。
    * Casts types according to the expected input types for [[Expression]]s.
    */
   object ImplicitTypeCasts extends TypeCoercionRule {

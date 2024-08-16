@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowE
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 
 /**
+ * PlanHelper包含Analyzer和Optimizer可以使用的实用方法。它也可以是Analyzer和Optimizer中多个规则中通用的方法的容器。
  * [[PlanHelper]] contains utility methods that can be used by Analyzer and Optimizer.
  * It can also be container of methods that are common across multiple rules in Analyzer
  * and Optimizer.

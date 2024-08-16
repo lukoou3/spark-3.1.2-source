@@ -23,6 +23,11 @@ import org.apache.spark.util.BoundedPriorityQueue
 
 
 /**
+ * 一个简单的实用程序，用于在查询计划中跟踪运行时和相关统计数据。
+ * 我们跟踪两个单独的概念：
+ * 1.Phases(阶段)：这些是查询规划中的广泛阶段，如下所示，即分析、优化和物理规划（仅规划）。
+ * 2.Rules(规则)：这些是我们跟踪的Catalyst规则。除了时间，我们还跟踪调用次数和有效调用次数。
+ *
  * A simple utility for tracking runtime and associated stats in query planning.
  *
  * There are two separate concepts we track:
@@ -42,6 +47,7 @@ object QueryPlanningTracker {
   val PLANNING = "planning"
 
   /**
+   * rule的统计信息
    * Summary for a rule.
    * @param totalTimeNs total amount of time, in nanosecs, spent in this rule.
    * @param numInvocations number of times the rule has been invoked.
@@ -59,6 +65,7 @@ object QueryPlanningTracker {
   }
 
   /**
+   * phase的统计信息
    * Summary of a phase, with start time and end time so we can construct a timeline.
    */
   class PhaseSummary(val startTimeMs: Long, val endTimeMs: Long) {

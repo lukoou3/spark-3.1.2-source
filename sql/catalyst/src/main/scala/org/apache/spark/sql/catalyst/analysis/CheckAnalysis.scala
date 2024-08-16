@@ -32,6 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
+ * 当传递无法分析的无效查询时，抛出面向用户的错误。
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis extends PredicateHelper {
@@ -790,6 +791,7 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   /**
+   * 验证收集的指标名称是否唯一。同一名称不能用于具有不同结果的指标。但是，允许具有相同结果和名称的多个度量实例（例如自连接）。
    * Validate that collected metrics names are unique. The same name cannot be used for metrics
    * with different results. However multiple instances of metrics with with same result and name
    * are allowed (e.g. self-joins).

@@ -88,6 +88,7 @@ object FakeV2SessionCatalog extends TableCatalog {
 }
 
 /**
+ * 提供了一种在分析过程中保持状态的方法，主要用于解析视图。这使我们能够将分析环境的关注点与目录解耦。此处保存的状态是每个查询的状态。
  * Provides a way to keep state during the analysis, mostly for resolving views. This enables us to
  * decouple the concerns of analysis environment from the catalog.
  * The state that is kept here is per-query.

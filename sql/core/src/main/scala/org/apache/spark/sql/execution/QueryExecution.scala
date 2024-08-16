@@ -46,9 +46,11 @@ import org.apache.spark.util.Utils
 /**
  * saprk sql的主要流程在这个类里
  *
+ * 使用Spark执行关系查询的主要工作流程。旨在让开发人员轻松访问查询执行的中间阶段。
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
  *
+ * 虽然这不是一个公共类，但我们应该避免为了更改而更改函数名，因为很多开发人员使用该功能进行调试。
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
