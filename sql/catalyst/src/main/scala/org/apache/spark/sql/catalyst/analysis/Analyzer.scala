@@ -2159,6 +2159,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   } else {
                     wf
                   }
+                // 包装AggregateFunction
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   if (filter.isDefined && !filter.get.deterministic) {
@@ -2320,6 +2321,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
+   * 将包含聚合表达式的投影转换为聚合。
    * Turns projections that contain aggregate expressions into aggregations.
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
