@@ -22,6 +22,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.types.IntegerType
 
+/**
+ * 这个不就是聚合函数的测试码
+ */
 class FirstLastTestSuite extends SparkFunSuite {
   val input = AttributeReference("input", IntegerType, nullable = true)()
   val evaluator = DeclarativeAggregateEvaluator(Last(input, false), Seq(input))

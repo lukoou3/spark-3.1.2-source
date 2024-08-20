@@ -60,10 +60,10 @@ case class GenerateExec(
     generator: Generator,
     requiredChildOutput: Seq[Attribute],
     outer: Boolean,
-    generatorOutput: Seq[Attribute],
+    generatorOutput: Seq[Attribute], // 只是generator的Output
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
-
+  var test = 1
   override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
 
   override lazy val metrics = Map(

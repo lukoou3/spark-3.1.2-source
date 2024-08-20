@@ -99,13 +99,17 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
  */
 case class Generate(
     generator: Generator,
-    unrequiredChildIndex: Seq[Int],
+    unrequiredChildIndex: Seq[Int], // 这个是不需要Child输出的列
     outer: Boolean,
     qualifier: Option[String],
     generatorOutput: Seq[Attribute],
     child: LogicalPlan)
   extends UnaryNode {
+  if(unrequiredChildIndex.nonEmpty){
+    var test = 1
+  }
 
+  // 这个是需要Child输出的列：总的减去unrequiredChildIndex
   lazy val requiredChildOutput: Seq[Attribute] = {
     val unrequiredSet = unrequiredChildIndex.toSet
     child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
@@ -120,8 +124,10 @@ case class Generate(
 
   override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
+  // 给输出添加表前缀，如果定义table_alias
   def qualifiedGeneratorOutput: Seq[Attribute] = {
     val qualifiedOutput = qualifier.map { q =>
+      // 是否定义table_alias
       // prepend the new qualifier to the existed one
       generatorOutput.map(a => a.withQualifier(Seq(q)))
     }.getOrElse(generatorOutput)
@@ -138,6 +144,9 @@ case class Generate(
 //
 case class Filter(condition: Expression, child: LogicalPlan)
   extends OrderPreservingUnaryNode with PredicateHelper {
+  if(child.isInstanceOf[LocalRelation]){
+    print(1)
+  }
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows

@@ -244,6 +244,10 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 
 
 /**
+ * 优化IN谓词：
+ * 1。当列表为空且值不可为null时，将谓词转换为false。
+ * 2.删除literal重复。
+ * 3.用更快的优化版本（value，HashSet[Literal]）替换（value，seq[Literal]]）。
  * Optimize IN predicates:
  * 1. Converts the predicate to false when the list is empty and
  *    the value is not nullable.
@@ -799,6 +803,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 
 
 /**
+ * 删除不必要的强制转换，因为输入已经是正确的类型。
  * Removes [[Cast Casts]] that are unnecessary because the input is already the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {

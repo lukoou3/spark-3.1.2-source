@@ -1465,6 +1465,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     /**
+     * 通过自上而下遍历输入表达式来解析属性并提取值表达式。遍历是以自上而下的方式完成的，因为我们需要跳过未绑定的lambda函数表达式。
+     * lambda表达式在不同的规则ResolveLambdaVariables中解析
      * Resolves the attribute and extract value expressions(s) by traversing the
      * input expression in top down manner. The traversal is done in top-down manner as
      * we need to skip over unbound lambda function expression. The lambda expressions are
@@ -1475,6 +1477,7 @@ class Analyzer(override val catalogManager: CatalogManager)
      *
      * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]]
      *
+     * 在此例程中，未解决的属性从输入计划的子属性中解析出来。
      * Note : In this routine, the unresolved attributes are resolved from the input plan's
      * children attributes.
      *

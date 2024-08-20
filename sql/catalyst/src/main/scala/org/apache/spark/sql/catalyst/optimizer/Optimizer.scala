@@ -608,6 +608,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
 }
 
 /**
+ * 列裁剪
  * Attempts to eliminate the reading of unneeded columns from the query plan.
  *
  * Since adding Project before Filter conflicts with PushPredicatesThroughProject, this rule will
@@ -620,6 +621,7 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
 object ColumnPruning extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
+    // 修剪未使用的列
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -650,6 +652,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
         if !child.outputSet.subsetOf(s.references) =>
       s.copy(child = prunedChild(child, s.references))
 
+    // Generate删除不需要的引用
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
       val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
@@ -717,6 +720,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     }
 
   /**
+   * 过滤前的Project不是必需的，但与PushPredictesThroughProject冲突，因此将其删除。
+   * 由于Project是自上而下添加的，我们需要按自下而上的顺序删除，否则可能会遗漏较低的Project。
    * The Project before Filter is not necessary but conflict with PushPredicatesThroughProject,
    * so remove it. Since the Projects have been added top-down, we need to remove in bottom-up
    * order, otherwise lower Projects can be missed.
@@ -1019,6 +1024,7 @@ object CombineUnions extends Rule[LogicalPlan] {
 }
 
 /**
+ * 将两个相邻的Filter运算符组合成一个，将非冗余条件合并成一个连词谓词。
  * Combines two adjacent [[Filter]] operators into one, merging the non-redundant conditions into
  * one conjunctive predicate.
  */
@@ -1145,6 +1151,8 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * 普通运算符和连接的谓词下推的统一版本。
+ * 此规则提高了级联连接的谓词下推的性能，例如：过滤连接连接连接连接。大多数谓词可以在一次传递中向下推。
  * The unified version for predicate pushdown of normal operators and joins.
  * This rule improves performance of predicate pushdown for cascading joins such as:
  *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
@@ -1158,6 +1166,7 @@ object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * 谓词下推
  * Pushes [[Filter]] operators through many operators iff:
  * 1) the operator is deterministic
  * 2) the predicate is deterministic and the operator will not change any of rows.
