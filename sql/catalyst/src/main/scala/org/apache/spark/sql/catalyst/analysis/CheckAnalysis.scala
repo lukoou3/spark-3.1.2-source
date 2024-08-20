@@ -224,6 +224,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
+          // 校验Aggregate计划, 校验groupBy字句和select字句符合规范
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)

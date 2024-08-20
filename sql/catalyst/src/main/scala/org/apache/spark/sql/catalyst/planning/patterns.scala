@@ -272,6 +272,10 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 }
 
 /**
+ * 在规划聚合的物理执行时使用的提取器。与逻辑聚合相比，执行以下转换：
+ *   未命名的分组表达式被命名，以便在聚合的各个阶段都可以引用它们
+ *   出现多次的聚合将被消除重复。
+ *   聚合本身的计算与最终结果是分开的。例如，count+1中的计数将被拆分为AggregateExpression和计算count.resultAttribute+1的最终计算。
  * An extractor used when planning the physical execution of an aggregation. Compared with a logical
  * aggregation, the following transformations are performed:
  *  - Unnamed grouping expressions are named so that they can be referred to across phases of
