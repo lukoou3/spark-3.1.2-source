@@ -292,12 +292,16 @@ object PhysicalAggregation {
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+      // 单个聚合表达式可能会在resultExpression中多次出现。
+      // 为了避免多次评估单个聚合函数，我们将构建一组语义上不同的聚合表达式并重写表达式，以便它们引用了实际计算的聚合函数的单个副本。
+      // 非确定性聚合表达式不会进行重复数据消除。
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a set of semantically distinct aggregate expressions and re-write expressions so
       // that they reference the single copy of the aggregate function which actually gets computed.
       // Non-deterministic aggregate expressions are not deduplicated.
       val equivalentAggregateExpressions = new EquivalentExpressions
+      // agg表达式就是个中间结果，提取非重复聚合表达式
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
@@ -320,6 +324,9 @@ object PhysicalAggregation {
       }
       val groupExpressionMap = namedGroupingExpressions.toMap
 
+      // 原始的“resultExpression”是一组表达式，可以引用聚合表达式、分组列值和常量。
+      // 当聚合运算符最终发送输出行时，我们将使用“resultExpression”生成一个输出投影，该投影将分组列和最终聚合结果缓冲区作为输入。
+      // 因此，我们必须重写结果表达式，使其属性与最终结果投影输入行的属性相匹配：
       // The original `resultExpressions` are a set of expressions which may reference
       // aggregate expressions, grouping column values, and constants. When aggregate operator
       // emits output rows, we will use `resultExpressions` to generate an output projection
@@ -329,6 +336,8 @@ object PhysicalAggregation {
       val rewrittenResultExpressions = resultExpressions.map { expr =>
         expr.transformDown {
           case ae: AggregateExpression =>
+            // 最终聚合缓冲区的属性将是“finalAggregationAttributes”，
+            // 因此，用集合中的相应属性替换每个聚合表达式：
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
             // so replace each aggregate expression by its corresponding attribute in the set:
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption

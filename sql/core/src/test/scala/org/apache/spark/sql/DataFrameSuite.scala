@@ -367,11 +367,38 @@ class DataFrameSuite extends QueryTest
     }
   }
 
+  test("test_my_code0") {
+    val spark = SparkSession.builder()
+            .master("local[1]")
+            .appName("test")
+            .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
+            .getOrCreate()
+
+    val datas = List(
+      (11L, "莫南", 20, Seq((1, "a"),(2, "b"),(3, "c"))),
+      (21L, "燕青丝", 19, Seq((1, "a"),(2, "b"),(3, "c"))),
+      (31L, "沐璇音", 19, Seq((1, "a"),(2, "a"),(3, "a"))),
+      (41L, "苏流沙", 20, Seq((1, "a"),(2, "a"),(3, "a"))),
+    )
+    val df = spark.createDataFrame(datas).toDF("code", "name", "age", "datas")
+    df.printSchema()
+    df.createOrReplaceTempView("tab")
+    spark.sql("""
+    select code, name, age + 1 age, data._1 id, data._2 cate
+    from tab lateral view explode(datas) as data
+    where age > 10
+    """).foreach{x => {
+      println(Thread.currentThread() + ":" +x)
+    }}
+
+    spark.stop()
+  }
+
   test("test_my_code1") {
     val spark = SparkSession.builder()
             .master("local[1]")
             .appName("test")
-            //.config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
+            .config("spark.sql.codegen.factoryMode", "NO_CODEGEN")
             .getOrCreate()
 
     val datas = List(
@@ -381,11 +408,11 @@ class DataFrameSuite extends QueryTest
       (41L, "苏流沙", 20, Seq(4,2,3))
     )
     val df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
-    //df.createOrReplaceTempView("tab")
-    //spark.sql("select Coalesce(age, code) a, code + 1 b from tab where age > 1").collect()
+    df.createOrReplaceTempView("tab")
+    spark.sql("select code, sum(age) age_s from tab group by code").collect()
     //df.selectExpr("avg(age) avg_age").collect()
     //df.selectExpr("if(age + 1 > 2, age + 1, 2) a", "age + 1 b").collect()
-    df.selectExpr("code", "explode(cnts) as cnt", "age + 1 a").collect()
+    //df.selectExpr("code", "explode(cnts) as cnt", "age + 1 a").collect()
     /*df = df
             //.selectExpr("if(true, age, code)").collect().foreach(println(_))
             .filter("age > 1").selectExpr("Coalesce(age, code)", "code + 1")

@@ -438,6 +438,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // spark中聚合算子的执行
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
         val aggregateExpressions = aggExpressions.map(expr => expr.asInstanceOf[AggregateExpression])

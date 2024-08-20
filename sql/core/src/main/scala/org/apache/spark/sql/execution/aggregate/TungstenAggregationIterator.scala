@@ -84,7 +84,7 @@ class TungstenAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
-    initialInputBufferOffset: Int,
+    initialInputBufferOffset: Int, // 这个值是多少
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     originalInputAttributes: Seq[Attribute], // 输入schema
@@ -163,7 +163,7 @@ class TungstenAggregationIterator(
   // UnsafeFixedWidthAggregationMap and it is used to store
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
   private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
-    initialAggregationBuffer,
+    initialAggregationBuffer, // 用于初始化buffer
     StructType.fromAttributes(aggregateFunctions.flatMap(_.aggBufferAttributes)),
     StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
     TaskContext.get(),

@@ -49,7 +49,7 @@ case class HashAggregateExec(
     groupingExpressions: Seq[NamedExpression], // map阶段：groupingExpressions . reduce阶段：groupingAttributes
     aggregateExpressions: Seq[AggregateExpression], // map阶段：partial_aggregateExpressions  . reduce阶段：final_aggregateExpressions
     aggregateAttributes: Seq[Attribute], // map阶段：aggBufferAttributes  . reduce阶段：resultAttribute
-    initialInputBufferOffset: Int,
+    initialInputBufferOffset: Int, // 这个值是多少. map阶段：0. reduce阶段：group.length
     resultExpressions: Seq[NamedExpression], // map阶段：groupingAttributes + AggBufferAttributes . reduce阶段：就是最终的resultExpressions
     child: SparkPlan)
   extends BaseAggregateExec

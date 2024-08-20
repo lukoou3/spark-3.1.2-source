@@ -68,6 +68,7 @@ abstract class AggregationIterator(
   }
 
   // 初始化所有的AggregateFunctions绑定references，设置inputBufferOffset and mutableBufferOffset.
+  // 只是对ImperativeAggregate类型的函数做处理，大部分表达式实现的(sum/count/avg)都不需要做兼容
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
   protected def initializeAggregateFunctions(
@@ -231,6 +232,31 @@ abstract class AggregationIterator(
     }
   }
 
+  /**
+   * 处理输入，update，inputAttributes就是输入的列格式
+   *
+   * map update 阶段(org.apache.spark.sql.execution.aggregate.AggregationIterator#processRow())：
+   *   inputAttributes就是child的输出
+   *   update数据就是更新buffer，processRow(buffer, newInput)
+   *   使用updateExpressions更新
+   *   每个key都创建一个buffer，更新这个buffer：createNewAggregationBuffer()
+   *
+   * map 输出 阶段(org.apache.spark.sql.execution.aggregate.TungstenAggregationIterator#next)：
+   *   输出一组数据的聚合结果，处理逻辑：org.apache.spark.sql.execution.aggregate.AggregationIterator#generateOutput()
+   *   generateResultProjection() 返回处理逻辑，就是把key + buffer输出：
+   *      val resultProjection = UnsafeProjection.create(groupingAttributes ++ bufferAttributes, groupingAttributes ++ bufferAttributes)
+   *
+   * reduce update 阶段(org.apache.spark.sql.execution.aggregate.AggregationIterator#processRow())：
+   *  inputAttributes就是map阶段的输出：只是这里写的是child.output.dropRight(aggAttrs.length) ++ aggAttrs
+   *  update数据就是更新buffer，processRow(buffer, newInput)
+   *  使用mergeExpressions更新
+   *
+   * reduce 输出 阶段(org.apache.spark.sql.execution.aggregate.TungstenAggregationIterator#next)：
+   *    输出一组数据的聚合结果，处理逻辑：AggregationIterator#generateOutput()
+   *    计算buffer聚合结果，使用bufferAttributes
+   *    最后计算最终的结果，合并key和resultExpression：
+   *        UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
+   */
   protected val processRow: (InternalRow, InternalRow) => Unit =
     generateProcessRow(aggregateExpressions, aggregateFunctions, inputAttributes)
 
@@ -246,9 +272,10 @@ abstract class AggregationIterator(
     val bufferAttributes = aggregateFunctions.flatMap(_.aggBufferAttributes)
     // reduce阶段的输出
     if (modes.contains(Final) || modes.contains(Complete)) {
+      //
       val evalExpressions = aggregateFunctions.map {
         case ae: DeclarativeAggregate => ae.evaluateExpression
-        case agg: AggregateFunction => NoOp
+        case agg: AggregateFunction => NoOp // 占位符，不生成代码
       }
       val aggregateResult = new SpecificInternalRow(aggregateAttributes.map(_.dataType))
       val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)

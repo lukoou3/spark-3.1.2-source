@@ -318,6 +318,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
   protected val inputAggBufferOffset: Int
 
   /**
+   * 返回此强制聚合的副本，其中包含更新的mutableAggBufferOffset。此新副本的属性可能具有与原始副本不同的id。
    * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
    * This new copy's attributes may have different ids than the original.
    */
