@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
+ * 有TypedImperativeAggregate聚合函数使用的是这个
  * A hash-based aggregate operator that supports [[TypedImperativeAggregate]] functions that may
  * use arbitrary JVM objects as aggregation states.
  *

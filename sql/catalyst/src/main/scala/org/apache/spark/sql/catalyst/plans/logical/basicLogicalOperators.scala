@@ -937,6 +937,7 @@ case class Tail(limitExpr: Expression, child: LogicalPlan) extends OrderPreservi
 }
 
 /**
+ * 多表查询字段解析就是通过加了这一层SubqueryAlias实现的，解析完，后面会去掉SubqueryAlias
  * Aliased subquery.
  *
  * @param identifier the alias identifier for this subquery.
@@ -946,6 +947,7 @@ case class SubqueryAlias(
     identifier: AliasIdentifier,
     child: LogicalPlan)
   extends OrderPreservingUnaryNode {
+//println(identifier)
 
   def alias: String = identifier.name
 

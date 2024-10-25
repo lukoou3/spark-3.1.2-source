@@ -861,7 +861,7 @@ class SessionCatalog(
   def lookupTempView(table: String): Option[SubqueryAlias] = {
     val formattedTable = formatTableName(table)
     getTempView(formattedTable).map { view =>
-      SubqueryAlias(formattedTable, view)
+      SubqueryAlias(formattedTable, view) // 表的别名默认就是表名
     }
   }
 

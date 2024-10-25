@@ -144,6 +144,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
+      // 解析hash join
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
       //      have the broadcast hints, choose the smaller side (based on stats) to broadcast.
@@ -239,11 +240,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
          *    [[createCartesianProduct]]
          *    都不满足则 [[joins.BroadcastNestedLoopJoinExec]]
          */
-        createBroadcastHashJoin(true)
+        val join = createBroadcastHashJoin(true)
           .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
           .orElse(createShuffleHashJoin(true))
           .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
           .getOrElse(createJoinWithoutHint())
+        join
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,

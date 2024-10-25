@@ -244,19 +244,26 @@ abstract class AggregateFunction extends Expression {
 }
 
 /**
+ * API用于聚合函数，这些函数用命令式initialize（）、update（）和merge（）函数表示，这些函数在基于行的聚合缓冲区上操作。
  * API for aggregation functions that are expressed in terms of imperative initialize(), update(),
  * and merge() functions which operate on Row-based aggregation buffers.
  *
+ * 在这些函数中，代码应该通过将bufferSchema相对字段号添加到mutableAggBufferOffset来访问可变聚合缓冲区的字段，然后使用这个新的字段号访问缓冲区行。
+ * 这是必要的，因为当聚合运算符同时评估多个聚合函数时，此聚合函数的缓冲区嵌入在更大的共享聚合缓冲区中。
  * Within these functions, code should access fields of the mutable aggregation buffer by adding the
  * bufferSchema-relative field number to `mutableAggBufferOffset` then using this new field number
  * to access the buffer Row. This is necessary because this aggregation function's buffer is
  * embedded inside of a larger shared aggregation buffer when an aggregation operator evaluates
  * multiple aggregate functions at the same time.
  *
+ * 在merge（）中将多个中间聚合缓冲区合并在一起时，
+ * 我们需要执行类似的字段数算法（在这种情况下，在访问输入缓冲区时使用inputAggBufferOffset）。
  * We need to perform similar field number arithmetic when merging multiple intermediate
  * aggregate buffers together in `merge()` (in this case, use `inputAggBufferOffset` when accessing
  * the input buffer).
  *
+ * 正确的强制聚合求值取决于mutableAggBufferOffset和inputAggBufferOffset的正确性，
+ * 而不取决于aggBufferAttributes和inputAggBufferAttributes中属性id的正确性。
  * Correct ImperativeAggregate evaluation depends on the correctness of `mutableAggBufferOffset` and
  * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
  * and `inputAggBufferAttributes`.

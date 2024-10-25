@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.DataType
 
 /**
+ * 替换TimeZoneAwareExpression中没有timezone配置的值
  * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
  * time zone.
  */

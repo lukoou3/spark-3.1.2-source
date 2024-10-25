@@ -383,10 +383,27 @@ class DataFrameSuite extends QueryTest
     val df = spark.createDataFrame(datas).toDF("code", "name", "age", "datas")
     df.printSchema()
     df.createOrReplaceTempView("tab")
+
+    val datas2 = List(
+      (11L, "莫南2", 220),
+      (21L, "燕青丝2", 219),
+      (31L, "沐璇音2", 219),
+      (41L, "苏流沙2", 220),
+    )
+    val df2 = spark.createDataFrame(datas2).toDF("code", "name", "age")
+    df2.createOrReplaceTempView("tab2")
+
     spark.sql("""
-    select code, name, age + 1 age, data._1 id, data._2 cate
-    from tab lateral view explode(datas) as data
-    where age > 10
+    select
+       /*+ SHUFFLE_HASH(a) */
+      a.code,
+      a.name,
+      a.age,
+      b.name name2,
+      b.age age2
+    from tab a
+    left join tab2 b on a.code = b.code and a.age <=> b.age
+    where a.age > 10
     """).foreach{x => {
       println(Thread.currentThread() + ":" +x)
     }}
@@ -409,7 +426,7 @@ class DataFrameSuite extends QueryTest
     )
     val df = spark.createDataFrame(datas).toDF("code", "name", "age", "cnts")
     df.createOrReplaceTempView("tab")
-    spark.sql("select code, sum(age) age_s from tab group by code").collect()
+    spark.sql("select code, sum(age) age_s, collect_list(name) name_list from tab group by code").collect()
     //df.selectExpr("avg(age) avg_age").collect()
     //df.selectExpr("if(age + 1 > 2, age + 1, 2) a", "age + 1 b").collect()
     //df.selectExpr("code", "explode(cnts) as cnt", "age + 1 a").collect()

@@ -48,6 +48,7 @@ case class BroadcastHashJoinExec(
     right: SparkPlan,
     isNullAwareAntiJoin: Boolean = false)
   extends HashJoin {
+  println(BroadcastHashJoinExec)
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")

@@ -138,7 +138,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
       EliminateResolvedHint,
-      EliminateSubqueryAliases,
+      EliminateSubqueryAliases, // 去除SubqueryAliases
       EliminateView,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
