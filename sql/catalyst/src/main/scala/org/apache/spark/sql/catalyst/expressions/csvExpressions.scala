@@ -32,6 +32,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
+ * 解析csv的函数
  * Converts a CSV input string to a [[StructType]] with the specified schema.
  */
 // scalastyle:off line.size.limit
@@ -193,6 +194,7 @@ case class SchemaOfCsv(
 }
 
 /**
+ * 转换生成csv的函数
  * Converts a [[StructType]] to a CSV output string.
  */
 // scalastyle:off line.size.limit
