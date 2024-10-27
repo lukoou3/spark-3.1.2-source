@@ -243,6 +243,7 @@ class CSVOptions(
     writerSettings
   }
 
+  // 转换CsvParserSettings参数
   def asParserSettings: CsvParserSettings = {
     val settings = new CsvParserSettings()
     val format = settings.getFormat

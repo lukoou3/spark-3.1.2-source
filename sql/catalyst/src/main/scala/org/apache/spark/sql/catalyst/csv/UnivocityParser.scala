@@ -70,6 +70,7 @@ class UnivocityParser(
   // their positions in the data schema.
   private val parsedSchema = if (options.columnPruning) requiredSchema else dataSchema
 
+  // 解析csv
   val tokenizer: CsvParser = {
     val parserSetting = options.asParserSettings
     // When to-be-parsed schema is shorter than the to-be-read data schema, we let Univocity CSV
@@ -137,6 +138,7 @@ class UnivocityParser(
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   /**
+   * converts, 不支持Array/Struct
    * Create a converter which converts the string value to a value according to a desired type.
    * Currently, we do not support complex types (`ArrayType`, `MapType`, `StructType`).
    *
